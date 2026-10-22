@@ -1,0 +1,17 @@
+# bluefin-t2 A1 kmod manifest
+# kver: 7.2.5-200.fc44.x86_64
+# built: 2026-10-20T11:33:25Z in bluefin-t2-proof:7.2.5
+# signature: bluefin-t2 THROWAWAY proof key - NOT PRODUCTION (THROWAWAY, not production)
+# columns: rpm_file<TAB>sha256<TAB>modules<TAB>kver
+kmod-t2bce-stack-0.01-1.x86_64.rpm	7ff0f3184c7474e1b01919e634b1d4c73deb4e34d609e973c4f395d8f6758a94	t2bce_dma,t2bce_core,t2bce_vhci,t2bce_audio,t2bce_ave	7.2.5-200.fc44.x86_64
+kmod-t2touchbar-0.1-1.x86_64.rpm	18258c1e2724e4b1daa1519570f41c23623f1b79fc8cc5ec801320a0f44e5ca1	t2hid,t2touchbar_bl,t2touchbar_kbd	7.2.5-200.fc44.x86_64
+kmod-hid-t2magicmouse-0.1-1.x86_64.rpm	bc635ae0b375ddc075a9a6c6a2b9520ab7d7c66479d45a5e1a69557b17ce3952	hid_t2magicmouse	7.2.5-200.fc44.x86_64
+kmod-t2bdrm-0.1-1.x86_64.rpm	1a173db0d0fd172fd81c170545b9b6beb0c89ae3fe52e46c8f941e51cb98120f	t2bdrm	7.2.5-200.fc44.x86_64
+kmod-t2smc-0.1-1.x86_64.rpm	fe52b723fd071c450854299248d98f13b5a132b5c370da43e39ae557aaeae7e0	t2smc	7.2.5-200.fc44.x86_64
+kmod-t2sbs-0.1-1.x86_64.rpm	2f71130a4a60820b01b8f50b26181abf4bb3ab25022e517a52cfd31e006a470a	t2sbs	7.2.5-200.fc44.x86_64
+kmod-t2mfi-fastcharge-0.1-1.x86_64.rpm	58b51d094423e9b9139e77a9d73f6e0d6590f65249aca05d397496ba3aed8237	t2mfi_fastcharge	7.2.5-200.fc44.x86_64
+kmod-t2gmux-0.8-1.x86_64.rpm	300b402ac14d9f56bae8d9bc6ce697c5491f835742d11e486b120c05839db3d5	t2gmux	7.2.5-200.fc44.x86_64
+kmod-t2thunderbolt-0.6-1.x86_64.rpm	b2c5dfc756fd0289ac282fef89391c920385169c881fbb4f2a8f3ef954a2e3b0	t2thunderbolt	7.2.5-200.fc44.x86_64
+kmod-t2smp-0.1-1.x86_64.rpm	6ea2587f0803fc18bb512adaa74219ab00984ec45d08aac8439bb85f2075ea92	t2smp	7.2.5-200.fc44.x86_64
+kmod-t2-precision-trackpad-0.01-1.x86_64.rpm	6278672929d52c5879d5927a5665be3221164363856a524ef910436837a52315	t2_precision_trackpad	7.2.5-200.fc44.x86_64
+kmod-t2-trackpad-actuator-0.01-1.x86_64.rpm	b18da9034d18473f704d0ee8ab72bb239faad0d08fc9be46f76779d17ae6582e	t2_trackpad_actuator	7.2.5-200.fc44.x86_64

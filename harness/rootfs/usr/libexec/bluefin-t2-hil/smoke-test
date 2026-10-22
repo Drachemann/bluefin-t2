@@ -1,0 +1,541 @@
+#!/usr/bin/env bash
+# /usr/libexec/bluefin-t2-hil/smoke-test — the booted-system smoke test, then power off.
+#
+# Called by bluefin-t2-hil-test.service (after multi-user.target) with --poweroff.
+# Run by hand without --poweroff it asserts and writes result.json but leaves the
+# machine up, which is what you want while debugging the harness itself.
+#
+# The four HARD assertions are the ones this task scopes, and exactly these decide
+# pass/fail (all must be true):
+#
+#   1. modules         the named set from /usr/share/bluefin-t2/models.d/<model>.toml:
+#                      every expected_loaded and expected_unbound object is loaded, and
+#                      no expected_absent object is. No bare count assertion.
+#   2. firmware        no "firmware load failed" in dmesg
+#   3. wifi            at least one Wi-Fi device in a connected state (waited for)
+#   4. systemd_failed  systemctl --failed is empty
+#
+# The design's further smoke items (Touch Bar usable as the desktop user, fprintd-list
+# non-empty, fingerprint offered at the lock screen, one suspend/resume cycle, the DSP
+# sink in wpctl status) are NOT scored here. They need a logged-in desktop session or a
+# suspend cycle that a boot unit cannot safely drive, and a hung suspend would turn a
+# hardware failure into an untestable one. They are recorded under "observed" where
+# they can be measured without a session, and the runbook lists them as not proven.
+#
+# Exit 0 whenever result.json was written, regardless of verdict: the verdict lives in
+# the JSON, and a "failed" unit would pollute the very systemd_failed assertion this
+# test reports on. Exit 1 only when the run could not be recorded.
+
+set -euo pipefail
+
+# The userspace test can afford a longer wait for the stick than sysinit could.
+: "${HIL_MOUNT_WAIT:=60}"
+export HIL_MOUNT_WAIT
+
+SELF_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib.sh
+source "$SELF_DIR/lib.sh"
+
+POWEROFF=0
+for arg in "$@"; do
+  case $arg in
+    --poweroff) POWEROFF=1 ;;
+    -h|--help)
+      printf 'usage: %s [--poweroff]\n' "${0##*/}" >&2
+      exit 0
+      ;;
+    *)
+      printf 'usage: %s [--poweroff]\n' "${0##*/}" >&2
+      exit 2
+      ;;
+  esac
+done
+
+SETTLE_S=${HIL_SETTLE_S:-10}
+WIFI_WAIT_S=${HIL_WIFI_WAIT_S:-60}
+
+STARTED_AT=$(hil_now)
+START_EPOCH=$(date +%s)
+
+# ---------------------------------------------------------------------------
+# Locate the run and give userspace a moment to settle.
+# ---------------------------------------------------------------------------
+
+if ! hil_ensure_results_mount; then
+  hil_log "results stick unavailable: cannot write result.json (this run will classify as FAILED_USERSPACE)"
+  exit 1
+fi
+run_dir=$(hil_run_dir) || {
+  hil_log "no run directory on the results stick: cannot write result.json"
+  exit 1
+}
+run_id=$(basename -- "$run_dir")
+
+if [[ $SETTLE_S =~ ^[0-9]+$ ]] && (( SETTLE_S > 0 )); then
+  sleep "$SETTLE_S"
+fi
+
+# ---------------------------------------------------------------------------
+# Identity
+# ---------------------------------------------------------------------------
+
+model=$(cat /sys/class/dmi/id/product_name 2>/dev/null | tr -d '\r\n' || true)
+[[ -n ${model:-} ]] || model=unknown
+model_file="$HIL_MODELS_DIR/$model.toml"
+booted_kver=$(uname -r)
+os_pretty=$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+
+image_ref=""
+image_digest=""
+ostree_commit=""
+if command -v bootc >/dev/null 2>&1; then
+  bootc_json=$(bootc status --json 2>/dev/null || true)
+  if [[ -n $bootc_json ]]; then
+    image_digest=$(printf '%s' "$bootc_json" | grep -oE 'sha256:[0-9a-f]{64}' | head -n 1 || true)
+    image_ref=$(printf '%s' "$bootc_json" \
+      | grep -oE '"(image|target)"[[:space:]]*:[[:space:]]*"[^"]*"' \
+      | head -n 1 | sed -E 's/^[^:]*:[[:space:]]*"([^"]*)"$/\1/' || true)
+    ostree_commit=$(printf '%s' "$bootc_json" \
+      | grep -oE '"commit"[[:space:]]*:[[:space:]]*"[0-9a-f]{64}"' \
+      | head -n 1 | grep -oE '[0-9a-f]{64}' || true)
+  fi
+fi
+if [[ -z $image_digest ]]; then
+  hil_log "warning: could not read the booted image digest from bootc status; evaluate.sh will treat this run as HARNESS_ERROR"
+fi
+
+# ---------------------------------------------------------------------------
+# Assertion 1: the named module set
+# ---------------------------------------------------------------------------
+
+modules_ok=0
+modules_reason=""
+declare -a mod_declared=() mod_missing=() mod_unexpected=() mod_unmeasured=()
+
+if [[ ! -f $model_file ]]; then
+  modules_reason="models.d-missing:$model"
+else
+  modules_ok=1
+  for key in expected_loaded expected_unbound expected_absent; do
+    if names=$(hil_models_category "$model_file" "$key"); then
+      while IFS= read -r name; do
+        [[ -n $name ]] || continue
+        if [[ $name == unmeasured ]]; then
+          mod_unmeasured+=("$key")
+          continue
+        fi
+        mod_declared+=("$name")
+        case $key in
+          expected_loaded|expected_unbound)
+            if [[ ! -d /sys/module/$name ]]; then
+              mod_missing+=("$name")
+              modules_ok=0
+            fi
+            ;;
+          expected_absent)
+            if [[ -d /sys/module/$name ]]; then
+              mod_unexpected+=("$name")
+              modules_ok=0
+            fi
+            ;;
+        esac
+      done <<< "$names"
+    else
+      rc=$?
+      case $rc in
+        2) modules_reason="models.d-unreadable:$model" ;;
+        4) modules_reason="category-missing:$key" ;;
+        5) modules_reason="category-not-a-list-of-strings:$key" ;;
+        *) modules_reason="category-error:$key:$rc" ;;
+      esac
+      modules_ok=0
+      break
+    fi
+  done
+
+  # udev loads hid_t2magicmouse when the internal trackpad's USB device enumerates. On the
+  # first boot after install that was 36 s after this snapshot (2026-10-22), so the scored
+  # run failed on a module that loaded moments later. Wait, bounded, rather than sampling.
+  module_wait_s=${MODULE_WAIT_S:-60}
+  modules_waited=0
+  while (( ${#mod_missing[@]} > 0 && modules_waited < module_wait_s )); do
+    sleep 2
+    modules_waited=$((modules_waited + 2))
+    declare -a module_still_missing=()
+    for m in "${mod_missing[@]}"; do
+      [[ -d /sys/module/$m ]] || module_still_missing+=("$m")
+    done
+    mod_missing=("${module_still_missing[@]}")
+  done
+  if (( ${#mod_missing[@]} == 0 && ${#mod_unexpected[@]} == 0 )); then
+    modules_ok=1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Assertion 2: no firmware load failure
+# ---------------------------------------------------------------------------
+
+firmware_ok=0
+fw_count=0
+declare -a fw_matches=()
+dmesg_out=""
+if dmesg_out=$(dmesg 2>/dev/null); then
+  :
+else
+  dmesg_out=$(journalctl -k -b --no-pager 2>/dev/null || true)
+fi
+# The design names the generic string "firmware load failed", but that is not what the
+# drivers on this hardware emit. brcmfmac says:
+#   brcmfmac ...: Direct firmware load for brcm/brcmfmac4364b3-... failed with error -2
+# so a literal grep for the design's phrase passes while the radio has no firmware at all.
+# That made this assertion vacuous — the 2026-10-21 run-2 boot had no firmware in /var and
+# still scored firmware=ok. Match the family, and additionally require that the driver
+# created a Wi-Fi device, which is the thing "no firmware" actually prevents.
+FW_PATTERN='firmware load failed|Direct firmware load for .* failed|failed to load firmware|Falling back to sysfs fallback for|brcmf_fw_alloc_request.*fail'
+declare -a wifi_ifaces=()
+while IFS= read -r iface; do
+  [[ -n $iface ]] || continue
+  wifi_ifaces+=("$iface")
+done < <(for i in /sys/class/net/*; do [[ -e "$i/phy80211" ]] && printf '%s\n' "${i##*/}"; done)
+
+if [[ -n $dmesg_out ]]; then
+  fw_matches_text=$(printf '%s\n' "$dmesg_out" | grep -E "$FW_PATTERN" || true)
+  if [[ -z $fw_matches_text ]]; then
+    firmware_ok=1
+  else
+    fw_count=$(printf '%s\n' "$fw_matches_text" | wc -l | tr -d '[:space:]')
+    while IFS= read -r line; do
+      [[ -n $line ]] || continue
+      (( ${#fw_matches[@]} < 10 )) || break
+      fw_matches+=("$line")
+    done <<< "$fw_matches_text"
+  fi
+else
+  hil_log "warning: dmesg and journalctl -k both failed; firmware assertion cannot pass"
+fi
+
+if (( firmware_ok == 1 )) && (( ${#wifi_ifaces[@]} == 0 )); then
+  firmware_ok=0
+  fw_matches+=("no phy80211 interface under /sys/class/net: the Wi-Fi driver never created a device (missing firmware or unloaded driver)")
+fi
+
+# ---------------------------------------------------------------------------
+# Assertion 3: Wi-Fi associated (waited for)
+# ---------------------------------------------------------------------------
+
+wifi_ok=0
+wifi_dev=""
+wifi_state=""
+wifi_conn=""
+wifi_waited=0
+wifi_reason=""
+if ! command -v nmcli >/dev/null 2>&1; then
+  wifi_reason="nmcli-missing"
+else
+  for (( i = 0; i <= WIFI_WAIT_S; i += 3 )); do
+    wifi_line=""
+    if wifi_status=$(nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device status 2>/dev/null); then
+      wifi_line=$(printf '%s\n' "$wifi_status" | awk -F: '$2 == "wifi" { print; exit }')
+    fi
+    if [[ -n $wifi_line ]]; then
+      IFS=: read -r wifi_dev _ wifi_state wifi_conn <<< "$wifi_line"
+      case $wifi_state in
+        connected|"connected (externally)")
+          wifi_ok=1
+          break
+          ;;
+      esac
+    fi
+    wifi_waited=$i
+    if (( i < WIFI_WAIT_S )); then sleep 3; fi
+  done
+  if (( wifi_ok == 0 )) && [[ -z $wifi_reason ]]; then
+    wifi_reason="not-associated-after-${WIFI_WAIT_S}s"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Assertion 4: systemctl --failed is empty
+# ---------------------------------------------------------------------------
+
+systemd_failed_ok=0
+declare -a failed_units=()
+if failed_text=$(systemctl --failed --no-legend --plain 2>/dev/null); then
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    unit=$(printf '%s' "$line" | awk '{ print $1 }')
+    [[ -n $unit ]] || continue
+    failed_units+=("$unit")
+  done <<< "$failed_text"
+  if (( ${#failed_units[@]} == 0 )); then
+    systemd_failed_ok=1
+  fi
+else
+  hil_log "warning: systemctl --failed failed; the assertion cannot pass"
+fi
+
+# A unit NAME alone does not localise the fault, and the booted system is powered off right
+# after this — so capture why each unit failed while we can. The first run (2026-10-21)
+# reported rpc-statd-notify.service and user@NR.service with no explanation and no way to
+# get one afterwards.
+declare -a failed_logs=()
+for u in "${failed_units[@]}"; do
+  ulog=$(journalctl -b --no-pager -n 20 -u "$u" 2>/dev/null | tr '\n' '|' | cut -c1-2000 || true)
+  failed_logs+=("$u: $ulog")
+done
+
+# --- hygiene: the regressions the first bench boots had, caught without a human ------
+# Each of these was found by reading the journal after the fact. Scoring them here means
+# the next regression fails the run instead of waiting for someone to notice the console.
+hygiene_ok=1
+declare -a hygiene_problems=()
+blacklist_noise=$(journalctl -k -b --no-pager 2>/dev/null | grep -c 'is blacklisted' || true)
+(( blacklist_noise == 0 )) || hygiene_problems+=("blacklist-noise:${blacklist_noise}")
+for g in disk video audio render kvm tty; do
+  getent group "$g" >/dev/null 2>&1 || hygiene_problems+=("group-missing:${g}")
+done
+btrfs_errors=$(journalctl -k -b --no-pager 2>/dev/null | grep -ciE 'btrfs.*(error|corrupt)' || true)
+(( btrfs_errors == 0 )) || hygiene_problems+=("btrfs-errors:${btrfs_errors}")
+declare -a bluetooth_devices=()
+while IFS= read -r h; do
+  [[ -n $h ]] && bluetooth_devices+=("$h")
+done < <(ls -1 /sys/class/bluetooth 2>/dev/null || true)
+(( ${#bluetooth_devices[@]} > 0 )) || hygiene_problems+=("no-bluetooth-controller")
+acpi_duplicates=$(journalctl -k -b --no-pager 2>/dev/null | grep -c 'AE_ALREADY_EXISTS' || true)
+avc_denials=$(journalctl -b --no-pager 2>/dev/null | grep -c 'avc: *denied' || true)
+tainted=$(cat /proc/sys/kernel/tainted 2>/dev/null || echo unknown)
+(( ${#hygiene_problems[@]} == 0 )) || hygiene_ok=0
+
+# ---------------------------------------------------------------------------
+# Observations (recorded, never scored)
+# ---------------------------------------------------------------------------
+
+# Input device names, for triage: the 2026-10-21 run reported the internal trackpad dead
+# while every input module loaded, and a unit log cannot answer "did the kernel create the
+# device at all". /proc/bus/input/devices is dependency-free and names the hardware.
+declare -a input_devices=()
+while IFS= read -r _n; do
+  [[ -n $_n ]] || continue
+  input_devices+=("$_n")
+done < <(sed -n 's/^N: Name="\(.*\)"$/\1/p' /proc/bus/input/devices 2>/dev/null || true)
+
+declare -a drm_nodes=()
+while IFS= read -r node; do
+  if [[ -n $node ]]; then
+    drm_nodes+=("$node")
+  fi
+done < <(ls -1 /sys/class/drm 2>/dev/null | grep -E '^card[0-9]+' || true)
+
+dsp_present=0
+if [[ -d /usr/share/t2-dsp ]]; then
+  dsp_present=1
+fi
+pipewire_present=0
+if compgen -G '/run/user/*/pipewire-0' >/dev/null 2>&1; then
+  pipewire_present=1
+fi
+fprintd_present=0
+if command -v fprintd-list >/dev/null 2>&1; then fprintd_present=1; fi
+secure_boot_raw=""
+if command -v mokutil >/dev/null 2>&1; then
+  secure_boot_raw=$(mokutil --sb-state 2>&1 | head -n 1 || true)
+fi
+cmdline=$(tr -d '\0' < /proc/cmdline 2>/dev/null || true)
+
+# --- the userspace layer this image now ships ---------------------------------------
+# These are observations, not hard assertions: the four scored assertions are the design's
+# contract with evaluate.sh, and the interactive items (a real session, a fingerprint at the
+# lock screen, a suspend cycle) need a human. Recording them here means one run answers
+# "did the layer install and run" without adding a fifth verdict rule.
+
+report_exit=0
+report_json=""
+report_verdict=""
+report_model_class=""
+if command -v bluefin-t2 >/dev/null 2>&1; then
+  report_json=$(bluefin-t2 report --json 2>/dev/null) || report_exit=$?
+  # No jq dependency on the booted system: the document is line-oriented JSON.
+  report_verdict=$(printf '%s' "$report_json" | grep -oE '"verdict"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 \
+    | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/' || true)
+  report_model_class=$(printf '%s' "$report_json" | grep -oE '"class"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 \
+    | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/' || true)
+fi
+
+selinux_ok=0
+if semodule -lfull 2>/dev/null | awk '$1 == 400 && $2 == "kait2en-t2-touchid" { found = 1 } END { exit !found }'; then
+  selinux_ok=1
+fi
+pam_ok=0
+if grep -q 'pam_fprintd\.so' /etc/pam.d/system-auth 2>/dev/null; then pam_ok=1; fi
+docs_ok=0
+if [[ -s /usr/share/bluefin-t2/MODELS.md && -s /usr/share/bluefin-t2/RECOVERY.md ]]; then docs_ok=1; fi
+
+hub_ok=0
+hub_line=""
+if command -v bluefin-t2 >/dev/null 2>&1; then
+  hub_rc=0
+  hub_line=$(bluefin-t2 --check-gui 2>&1) || hub_rc=$?
+  hub_line=${hub_line%%$'\n'*}
+  if (( hub_rc == 0 )); then hub_ok=1; fi
+fi
+
+fw_state=$(head -n1 /var/lib/bluefin-t2/firmware.state 2>/dev/null || true)
+touchbar_global=$(systemctl --global is-enabled kait2en-touchbar.service 2>/dev/null || true)
+declare -a app_units=()
+for u in t2-fancontrol t2-smc-gaugingd t2-zonepowerd t2-force-click kait2en-touchbar-attach kait2en-t2-remote; do
+  state=$(systemctl is-active "$u" 2>/dev/null || true)
+  [[ -n $state ]] || state=unknown
+  app_units+=("$u=$state")
+done
+
+# ---------------------------------------------------------------------------
+# Status and result.json
+# ---------------------------------------------------------------------------
+
+failed=()
+if (( modules_ok == 0 )); then failed+=("modules"); fi
+if (( firmware_ok == 0 )); then failed+=("firmware"); fi
+if (( wifi_ok == 0 )); then failed+=("wifi"); fi
+if (( systemd_failed_ok == 0 )); then failed+=("systemd_failed"); fi
+if (( hygiene_ok == 0 )); then failed+=("hygiene"); fi
+
+if (( ${#failed[@]} == 0 )); then
+  status=pass
+  reason="all-assertions-passed"
+else
+  status=fail
+  reason="failed:$(IFS=,; printf '%s' "${failed[*]}")"
+fi
+
+bool_json() { if (( $1 == 1 )); then printf 'true'; else printf 'false'; fi; }
+
+write_result() {
+  local tmp
+  tmp="$run_dir/.result.json.$$"
+  {
+    printf '{\n'
+    printf '  "schema": 1,\n'
+    printf '  "kind": "result",\n'
+    printf '  "status": %s,\n' "$(hil_json_string "$status")"
+    printf '  "reason": %s,\n' "$(hil_json_string "$reason")"
+    printf '  "started_at": %s,\n' "$(hil_json_string "$STARTED_AT")"
+    printf '  "finished_at": %s,\n' "$(hil_json_string "$(hil_now)")"
+    printf '  "duration_s": %s,\n' "$(( $(date +%s) - START_EPOCH ))"
+    printf '  "model": %s,\n' "$(hil_json_string "$model")"
+    printf '  "booted_kver": %s,\n' "$(hil_json_string "$booted_kver")"
+    printf '  "image_ref": %s,\n' "$(hil_json_string_or_null "$image_ref")"
+    printf '  "image_digest": %s,\n' "$(hil_json_string_or_null "$image_digest")"
+    printf '  "ostree_commit": %s,\n' "$(hil_json_string_or_null "$ostree_commit")"
+    printf '  "os": %s,\n' "$(hil_json_string_or_null "$os_pretty")"
+    printf '  "assertions": {\n'
+    printf '    "modules": {\n'
+    printf '      "ok": %s,\n' "$(bool_json "$modules_ok")"
+    printf '      "reason": %s,\n' "$(hil_json_string_or_null "$modules_reason")"
+    printf '      "model_file": %s,\n' "$(hil_json_string "$model_file")"
+    printf '      "declared": %s,\n' "$(hil_json_array "${mod_declared[@]}")"
+    printf '      "missing": %s,\n' "$(hil_json_array "${mod_missing[@]}")"
+    printf '      "unexpectedly_present": %s,\n' "$(hil_json_array "${mod_unexpected[@]}")"
+    printf '      "unmeasured_categories": %s,\n' "$(hil_json_array "${mod_unmeasured[@]}")"
+    printf '      "waited_s": %s\n' "$(hil_json_number_or_null "$modules_waited")"
+    printf '    },\n'
+    printf '    "firmware": {\n'
+    printf '      "ok": %s,\n' "$(bool_json "$firmware_ok")"
+    printf '      "match_count": %s,\n' "$(hil_json_number_or_null "$fw_count")"
+    printf '      "matches": %s,\n' "$(hil_json_array "${fw_matches[@]}")"
+    printf '      "interfaces": %s\n' "$(hil_json_array "${wifi_ifaces[@]}")"
+    printf '    },\n'
+    printf '    "wifi": {\n'
+    printf '      "ok": %s,\n' "$(bool_json "$wifi_ok")"
+    printf '      "device": %s,\n' "$(hil_json_string_or_null "$wifi_dev")"
+    printf '      "state": %s,\n' "$(hil_json_string_or_null "$wifi_state")"
+    printf '      "connection": %s,\n' "$(hil_json_string_or_null "$wifi_conn")"
+    printf '      "waited_s": %s,\n' "$(hil_json_number_or_null "$wifi_waited")"
+    printf '      "reason": %s\n' "$(hil_json_string_or_null "$wifi_reason")"
+    printf '    },\n'
+    printf '    "systemd_failed": {\n'
+    printf '      "ok": %s,\n' "$(bool_json "$systemd_failed_ok")"
+    printf '      "units": %s,\n' "$(hil_json_array "${failed_units[@]}")"
+    printf '      "unit_logs": %s\n' "$(hil_json_array "${failed_logs[@]}")"
+    printf '    },\n'
+    printf '    "hygiene": {\n'
+    printf '      "ok": %s,\n' "$(bool_json "$hygiene_ok")"
+    printf '      "problems": %s,\n' "$(hil_json_array "${hygiene_problems[@]}")"
+    printf '      "blacklist_noise": %s,\n' "$(hil_json_number_or_null "$blacklist_noise")"
+    printf '      "btrfs_errors": %s,\n' "$(hil_json_number_or_null "$btrfs_errors")"
+    printf '      "bluetooth_devices": %s,\n' "$(hil_json_array "${bluetooth_devices[@]}")"
+    printf '      "avc_denials": %s,\n' "$(hil_json_number_or_null "$avc_denials")"
+    printf '      "acpi_duplicates": %s,\n' "$(hil_json_number_or_null "$acpi_duplicates")"
+    printf '      "tainted": %s\n' "$(hil_json_string "$tainted")"
+    printf '    }\n'
+    printf '  },\n'
+    printf '  "failed_assertions": %s,\n' "$(hil_json_array "${failed[@]}")"
+    printf '  "observed": {\n'
+    printf '    "kernel_cmdline": %s,\n' "$(hil_json_string_or_null "$cmdline")"
+    printf '    "secure_boot": %s,\n' "$(hil_json_string_or_null "$secure_boot_raw")"
+    printf '    "drm_nodes": %s,\n' "$(hil_json_array "${drm_nodes[@]}")"
+    printf '    "dsp_dir_present": %s,\n' "$(bool_json "$dsp_present")"
+    printf '    "pipewire_runtime_present": %s,\n' "$(bool_json "$pipewire_present")"
+    printf '    "fprintd_available": %s,\n' "$(bool_json "$fprintd_present")"
+    printf '    "suspend_tested": false,\n'
+    printf '    "input_devices": %s,\n' "$(hil_json_array "${input_devices[@]}")"
+    printf '    "bluefin_t2": {\n'
+    printf '      "verdict": %s,\n' "$(hil_json_string_or_null "$report_verdict")"
+    printf '      "exit_code": %s,\n' "$(hil_json_number_or_null "$report_exit")"
+    printf '      "model_class": %s\n' "$(hil_json_string_or_null "$report_model_class")"
+    printf '    },\n'
+    printf '    "userspace": {\n'
+    printf '      "selinux_module_400": %s,\n' "$(bool_json "$selinux_ok")"
+    printf '      "pam_fingerprint": %s,\n' "$(bool_json "$pam_ok")"
+    printf '      "hub_headless": %s,\n' "$(bool_json "$hub_ok")"
+    printf '      "hub_line": %s,\n' "$(hil_json_string_or_null "$hub_line")"
+    printf '      "docs_present": %s,\n' "$(bool_json "$docs_ok")"
+    printf '      "touchbar_user_enabled": %s,\n' "$(hil_json_string_or_null "$touchbar_global")"
+    printf '      "app_units": %s,\n' "$(hil_json_array "${app_units[@]}")"
+    printf '      "firmware_state": %s\n' "$(hil_json_string_or_null "$fw_state")"
+    printf '    },\n' 
+    printf '    "suspend_note": %s\n' "$(hil_json_string "not implemented: a suspend/resume cycle inside a boot oneshot can hang the boot; the design smoke item is not scored here")"
+    printf '  },\n'
+    printf '  "harness": {\n'
+    printf '    "version": %s,\n' "$HIL_VERSION"
+    printf '    "run_id": %s,\n' "$(hil_json_string "$run_id")"
+    printf '    "results_root": %s,\n' "$(hil_json_string "$HIL_RESULTS_ROOT")"
+    printf '    "settle_s": %s,\n' "$(hil_json_number_or_null "$SETTLE_S")"
+    printf '    "wifi_wait_s": %s\n' "$(hil_json_number_or_null "$WIFI_WAIT_S")"
+    printf '  }\n'
+    printf '}\n'
+  } > "$tmp"
+
+  # Refuse to publish an unparseable result: grep-only JSON checking is enough here.
+  if ! grep -q '"kind": "result"' "$tmp"; then
+    hil_log "refusing to publish a malformed result.json"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  hil_sync_file "$tmp"
+  mv -- "$tmp" "$run_dir/result.json"
+  hil_sync_file "$run_dir"
+  return 0
+}
+
+if ! write_result; then
+  hil_log "result.json was not written; not powering off"
+  exit 1
+fi
+hil_log "result written to $run_dir/result.json: $status ($reason)"
+
+# Power off only when the run asked for it, by marker: attempt.sh creates
+# runs/<id>/POWEROFF for a scored run. An interactive boot has no marker and stays up —
+# on this hardware a power loss costs a macOS boot before Touch ID works again, so
+# powering off must be an explicit property of the run, not the default.
+if (( POWEROFF == 1 )); then
+  if [[ -e "$run_dir/POWEROFF" || -e "$HIL_RESULTS_ROOT/POWEROFF" ]]; then
+    hil_log "powering off (POWEROFF marker present)"
+    systemctl poweroff --no-block || true
+  else
+    hil_log "no POWEROFF marker: result recorded, staying up for the operator"
+  fi
+fi
+
+exit 0

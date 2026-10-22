@@ -1,0 +1,20 @@
+[Unit]
+# bluefin-t2 HIL: the smoke test, then power off (R2-11's result.json writer).
+#
+# Starts after multi-user.target so a full userspace exists, then the script itself
+# waits for Wi-Fi association and writes result.json before powering off.
+#
+# Bench image only. Never ships in the release image.
+Description=bluefin-t2 HIL: booted-system smoke test (powers off only when the run asks)
+After=multi-user.target network-online.target bluefin-t2-hil-userspace.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bluefin-t2-hil/smoke-test
+TimeoutStartSec=600
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

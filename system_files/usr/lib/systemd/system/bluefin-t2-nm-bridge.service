@@ -1,0 +1,19 @@
+[Unit]
+Description=bluefin-t2: prepare the Apple T2 Bridge (CDC-NCM) NetworkManager profile
+Documentation=file:/usr/share/bluefin-t2/MODELS.md
+# The T2 exposes a CDC-NCM interface with a fixed identity (05ac:8233). NetworkManager
+# auto-creates a generic wired profile for it that is wrong for this link; this unit
+# creates the one profile the T2 services expect. It is idempotent, so it is safe on
+# every boot and a no-op on a machine without the device.
+After=NetworkManager.service
+Wants=NetworkManager.service
+ConditionPathExists=/sys/class/net
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bluefin-t2/nm-bridge
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

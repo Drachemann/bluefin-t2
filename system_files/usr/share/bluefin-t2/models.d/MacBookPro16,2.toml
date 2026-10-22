@@ -1,0 +1,28 @@
+# bluefin-t2 — expected module set for one model, consumed by `bluefin-t2 report`, the
+# hub, Tier 2 and MODELS.md (design §4, "one expectation set, four consumers").
+#
+# MacBookPro16,2 is the model validated on hardware. The split below is the probed state,
+# re-confirmed live on 2026-10-20: 17 of the 18 objects loaded, `t2gmux` correctly absent
+# (a 13-inch integrated-GPU model has no GPU mux device to bind).
+#
+# The three categories are not decoration. `expected_unbound` exists because
+# hid_t2magicmouse loads and sits at refcount 0 when no Magic Mouse is paired — "loaded
+# but bound to nothing" is a correct state, not a failure, and conflating it with
+# expected_loaded would make the smoke test pass on a machine where it never loaded.
+
+# Evidence tier (design §4, §12 Q3): validated means a digest-pinned Tier 2 run for this
+# model is recorded. 15,2 and 15,4 are "validation-set"; 16,3 is "argument".
+status = "validated"
+
+expected_loaded = [
+  "t2bce_dma", "t2bce_core", "t2bce_vhci", "t2bce_audio", "t2bce_ave",
+  "t2hid", "t2touchbar_bl", "t2touchbar_kbd",
+  "t2bdrm", "t2smc", "t2smp", "t2sbs", "t2thunderbolt", "t2mfi_fastcharge",
+  "t2_precision_trackpad", "t2_trackpad_actuator",
+]
+
+# Loads, but no device binds it unless a Magic Mouse is paired.
+expected_unbound = ["hid_t2magicmouse"]
+
+# Present in the image, correctly not loaded on this model.
+expected_absent = ["t2gmux"]

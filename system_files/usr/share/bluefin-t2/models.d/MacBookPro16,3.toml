@@ -1,0 +1,22 @@
+# bluefin-t2 — expected module set for MacBookPro16,3
+#
+# The module set starts from MacBookPro16,2's. The two states 16,2 measured —
+# hid_t2magicmouse loaded but unbound, t2gmux present but correctly absent — are
+# UNMEASURED on this model until its own digest-pinned Tier 2 run is recorded
+# (design §12 Q3). The report prints "untested" for those, never "working".
+status = "argument"
+
+expected_loaded = [
+  "t2bce_dma", "t2bce_core", "t2bce_vhci", "t2bce_audio", "t2bce_ave",
+  "t2hid", "t2touchbar_bl", "t2touchbar_kbd",
+  "t2bdrm", "t2smc", "t2smp", "t2sbs", "t2thunderbolt", "t2mfi_fastcharge",
+  "t2_precision_trackpad", "t2_trackpad_actuator",
+]
+
+# Unmeasured on this model: 16,2 loads it with no device bound. Empty here on purpose.
+expected_unbound = []
+
+# Unmeasured on this model: 16,2 has no GPU mux device. Empty here on purpose.
+expected_absent = []
+
+unmeasured = ["hid_t2magicmouse", "t2gmux"]

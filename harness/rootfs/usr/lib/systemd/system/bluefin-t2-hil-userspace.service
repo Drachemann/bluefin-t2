@@ -1,0 +1,19 @@
+[Unit]
+# bluefin-t2 HIL: one appended, fsync'd line at multi-user.target (R2-11).
+#
+# Ordered before multi-user.target, so a line here means userspace reached the target.
+# A run with this line and no result.json is the FAILED_USERSPACE branch.
+#
+# Bench image only. Never ships in the release image.
+Description=bluefin-t2 HIL: multi-user stage marker
+After=bluefin-t2-hil-early.service
+Before=multi-user.target shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bluefin-t2-hil/stage-log userspace
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

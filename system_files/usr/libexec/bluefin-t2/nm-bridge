@@ -1,0 +1,91 @@
+#!/bin/bash
+# nm-bridge — create the one NetworkManager profile the T2 CDC-NCM link expects.
+#
+# The T2 exposes a CDC-NCM interface with a fixed USB identity (05ac:8233) and a fixed
+# MAC. NetworkManager's auto-default profile for it is wrong for this link and is
+# re-created on every re-enumeration, accumulating duplicates. The inherited integration
+# ships the matching no-auto-default rule; this helper creates the profile itself, once.
+#
+# Idempotent by construction: if the profile exists, it exits 0. On a machine without the
+# device (no class-A Mac is missing it, but a VM or a non-T2 host can run this image) it
+# also exits 0 — a unit that fails on hardware it does not have is noise in every report.
+
+set -euo pipefail
+
+PROFILE='Apple T2 Bridge'
+NCM_VENDOR=05ac
+NCM_PRODUCT=8233
+
+die() { echo "nm-bridge: $*" >&2; exit 1; }
+log() { echo "nm-bridge: $*"; }
+
+command -v nmcli >/dev/null || die "nmcli is missing; NetworkManager is not in this image"
+
+# Collect names first: piping nmcli into `grep -q` under pipefail reports a *successful*
+# match as a failure, the trap recorded in research/findings/module-pipeline.md §5.3.
+profiles="$(nmcli -t -f NAME connection show)" || die "cannot query NetworkManager"
+
+# --- find the Apple CDC-NCM interface -------------------------------------------------
+shopt -s nullglob
+found=()
+for net in /sys/class/net/*; do
+    [[ -e "$net/device/driver" ]] || continue
+    driver="$(readlink -f "$net/device/driver")"
+    [[ "${driver##*/}" == cdc_ncm ]] || continue
+    parent="$(readlink -f "$net/device")"
+    while [[ -n "$parent" && "$parent" != "/" ]]; do
+        if [[ -r "$parent/idVendor" && -r "$parent/idProduct" ]] \
+            && [[ "$(<"$parent/idVendor")" == "$NCM_VENDOR" ]] \
+            && [[ "$(<"$parent/idProduct")" == "$NCM_PRODUCT" ]]; then
+            found+=("${net##*/}")
+            break
+        fi
+        parent="${parent%/*}"
+    done
+done
+
+(( ${#found[@]} <= 1 )) || die "multiple Apple CDC-NCM interfaces found; refusing ambiguous profile changes"
+if (( ${#found[@]} == 0 )); then
+    log "no Apple CDC-NCM interface present; nothing to bridge"
+    exit 0
+fi
+
+iface="${found[0]}"
+mac="$(<"/sys/class/net/$iface/address")"
+[[ "$mac" =~ ^([0-9a-f]{2}:){5}[0-9a-f]{2}$ ]] || die "interface $iface has an unusable MAC: '$mac'"
+
+# The profile ships as a file (/etc/NetworkManager/system-connections/t2-ncm.nmconnection),
+# exactly as upstream's package installs it, so NetworkManager sees it before it starts and
+# autoconnects on the first boot. This helper only reconciles a profile that an earlier
+# image created at runtime, or creates one if the shipped file is missing.
+#
+# Do NOT activate the link from here. The first version called `nmcli connection up`, which
+# blocked and then failed on a freshly created profile; NetworkManager never retried it, so
+# the bridge could not reach the sensor for ~20 minutes and Touch ID only woke up after a
+# resume (2026-10-22). A shipped profile removes the race; a manual up would reintroduce it.
+common=(802-3-ethernet.mac-address "$mac" ipv4.method disabled ipv6.method link-local \
+        connection.autoconnect yes connection.autoconnect-retries 0)
+if grep -qxF "$PROFILE" <<<"$profiles"; then
+    # Do not rewrite a correct profile: NetworkManager re-activates on modify, which on the
+    # second boot of 2026-10-22 kept "startup complete" from arriving and failed
+    # NetworkManager-wait-online (and with it the greeter's user manager). Compare first.
+    ac=$(nmcli -g connection.autoconnect connection show "$PROFILE" 2>/dev/null || true)
+    v6=$(nmcli -g ipv6.method connection show "$PROFILE" 2>/dev/null || true)
+    pmac=$(nmcli -g 802-3-ethernet.mac-address connection show "$PROFILE" 2>/dev/null || true)
+    if [[ $ac == yes && $v6 == link-local && ${pmac,,} == "${mac,,}" ]]; then
+        log "profile '$PROFILE' already correct for $iface ($mac)"
+        exit 0
+    fi
+    nmcli connection modify "$PROFILE" "${common[@]}" \
+        || die "could not reconcile profile '$PROFILE' for $iface"
+    log "reconciled profile '$PROFILE' for $iface ($mac)"
+else
+    nmcli connection add type ethernet con-name "$PROFILE" ifname '*' "${common[@]}" \
+        || die "could not create profile '$PROFILE' for $iface"
+    log "created profile '$PROFILE' for $iface ($mac) (shipped file was missing)"
+fi
+if ip -6 addr show dev "$iface" scope link 2>/dev/null | grep -q 'inet6 fe80'; then
+    log "$iface has an IPv6 link-local address"
+else
+    log "$iface has no IPv6 link-local yet; NetworkManager will autoconnect the shipped profile"
+fi

@@ -1,0 +1,524 @@
+
+===== 0. environment =====
+container kernel (host kernel, shared): 7.2.11-200.fc44.x86_64
+target KVER                          : 7.2.5-200.fc44.x86_64
+fedora                               : Fedora release 44 (Forty Four)
+kernel-devel                         : /usr/src/kernels/7.2.5-200.fc44.x86_64
+gcc                                  : gcc (GCC) 16.2.1 20260819 (Red Hat 16.2.1-2)
+rpm                                  : RPM version 6.0.2
+openssl                              : OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+sign-file                            : /usr/src/kernels/7.2.5-200.fc44.x86_64/scripts/sign-file
+source tree                          : /src
+PASS  present /usr/src/kernels/7.2.5-200.fc44.x86_64/Module.symvers
+PASS  present /usr/src/kernels/7.2.5-200.fc44.x86_64/scripts/sign-file
+PASS  present /usr/src/kernels/7.2.5-200.fc44.x86_64/scripts/extract-module-sig.pl
+PASS  present /keys/t2-proof-THROWAWAY.key
+PASS  present /keys/t2-proof-THROWAWAY.pem
+modules in target tree: 4744
+
+===== 1. build, sign and verify all specs =====
+
+===== spec: t2bce_stack  (rpm: kmod-t2bce-stack, modules:t2bce_dma t2bce_core t2bce_vhci t2bce_audio t2bce_ave) =====
+[make exit 0]
+      BTF [M] t2bce_vhci/t2bce_vhci.ko
+    Skipping BTF generation for t2bce_vhci/t2bce_vhci.ko due to unavailability of vmlinux
+      CC [M]  t2bce_audio/t2bce_audio.mod.o
+      LD [M]  t2bce_audio/t2bce_audio.ko
+      BTF [M] t2bce_audio/t2bce_audio.ko
+    Skipping BTF generation for t2bce_audio/t2bce_audio.ko due to unavailability of vmlinux
+      CC [M]  t2bce_ave/t2bce_ave.mod.o
+      LD [M]  t2bce_ave/t2bce_ave.ko
+      BTF [M] t2bce_ave/t2bce_ave.ko
+    Skipping BTF generation for t2bce_ave/t2bce_ave.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2bce_stack'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2bce_stack built all expected modules:t2bce_dma t2bce_core t2bce_vhci t2bce_audio t2bce_ave
+PASS  t2bce_dma: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2bce_dma: signer CN is the throwaway key
+PASS  t2bce_dma: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2bce_dma: sig_hashalgo sha512
+PASS  t2bce_dma: signed content == unsigned build output
+PASS  t2bce_dma: CMS signature verifies against the throwaway cert
+      signed sha256: 11d453f4ed0eb2f73ecb6361f3d8d6bf41bcf8b8e8f835c908174f19d99cb5f8
+PASS  t2bce_core: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2bce_core: signer CN is the throwaway key
+PASS  t2bce_core: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2bce_core: sig_hashalgo sha512
+PASS  t2bce_core: signed content == unsigned build output
+PASS  t2bce_core: CMS signature verifies against the throwaway cert
+      signed sha256: 1dd74565df3fd175d1caffd31f49317077380157a4e3307077bc807fd7b78b5f
+PASS  t2bce_vhci: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2bce_vhci: signer CN is the throwaway key
+PASS  t2bce_vhci: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2bce_vhci: sig_hashalgo sha512
+PASS  t2bce_vhci: signed content == unsigned build output
+PASS  t2bce_vhci: CMS signature verifies against the throwaway cert
+      signed sha256: 4c5fb98e7185e878af22d8a512967d4b6111ebbfca6731de8eff346bfd676aac
+PASS  t2bce_audio: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2bce_audio: signer CN is the throwaway key
+PASS  t2bce_audio: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2bce_audio: sig_hashalgo sha512
+PASS  t2bce_audio: signed content == unsigned build output
+PASS  t2bce_audio: CMS signature verifies against the throwaway cert
+      signed sha256: 24ddd3f7eeaac6634aa1f0d72c84b2445ac5b9355f6c8ee3a394c200afb779f8
+PASS  t2bce_ave: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2bce_ave: signer CN is the throwaway key
+PASS  t2bce_ave: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2bce_ave: sig_hashalgo sha512
+PASS  t2bce_ave: signed content == unsigned build output
+PASS  t2bce_ave: CMS signature verifies against the throwaway cert
+      signed sha256: 9ba03a78b66f0df1f3c16d87d24c0012882cbe683c7633b5b159ae17c13d968d
+
+===== spec: t2touchbar  (rpm: kmod-t2touchbar, modules:t2hid t2touchbar_bl t2touchbar_kbd) =====
+[make exit 0]
+      BTF [M] t2hid.ko
+    Skipping BTF generation for t2hid.ko due to unavailability of vmlinux
+      CC [M]  t2touchbar_bl.mod.o
+      LD [M]  t2touchbar_bl.ko
+      BTF [M] t2touchbar_bl.ko
+    Skipping BTF generation for t2touchbar_bl.ko due to unavailability of vmlinux
+      CC [M]  t2touchbar_kbd.mod.o
+      LD [M]  t2touchbar_kbd.ko
+      BTF [M] t2touchbar_kbd.ko
+    Skipping BTF generation for t2touchbar_kbd.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2touchbar'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2touchbar built all expected modules:t2hid t2touchbar_bl t2touchbar_kbd
+PASS  t2hid: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2hid: signer CN is the throwaway key
+PASS  t2hid: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2hid: sig_hashalgo sha512
+PASS  t2hid: signed content == unsigned build output
+PASS  t2hid: CMS signature verifies against the throwaway cert
+      signed sha256: 72100e5c615f9779ebb690b4666f3339e1fc318b39d42ec5f885dcb79f577d2c
+PASS  t2touchbar_bl: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2touchbar_bl: signer CN is the throwaway key
+PASS  t2touchbar_bl: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2touchbar_bl: sig_hashalgo sha512
+PASS  t2touchbar_bl: signed content == unsigned build output
+PASS  t2touchbar_bl: CMS signature verifies against the throwaway cert
+      signed sha256: d7095d7a394aee95d585b581a6cdcc6aa1b5463c898efdd3821f1860e2af7414
+PASS  t2touchbar_kbd: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2touchbar_kbd: signer CN is the throwaway key
+PASS  t2touchbar_kbd: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2touchbar_kbd: sig_hashalgo sha512
+PASS  t2touchbar_kbd: signed content == unsigned build output
+PASS  t2touchbar_kbd: CMS signature verifies against the throwaway cert
+      signed sha256: 15b5f9bd73dc05690165f820b7a1aebdf4fdadd576c2655c8335342d45d9c17c
+
+===== spec: hid_t2magicmouse  (rpm: kmod-hid-t2magicmouse, modules:hid_t2magicmouse) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  hid_t2magicmouse.o
+      MODPOST Module.symvers
+      CC [M]  hid_t2magicmouse.mod.o
+      CC [M]  .module-common.o
+      LD [M]  hid_t2magicmouse.ko
+      BTF [M] hid_t2magicmouse.ko
+    Skipping BTF generation for hid_t2magicmouse.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/hid_t2magicmouse'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  hid_t2magicmouse built all expected modules:hid_t2magicmouse
+PASS  hid_t2magicmouse: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  hid_t2magicmouse: signer CN is the throwaway key
+PASS  hid_t2magicmouse: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  hid_t2magicmouse: sig_hashalgo sha512
+PASS  hid_t2magicmouse: signed content == unsigned build output
+PASS  hid_t2magicmouse: CMS signature verifies against the throwaway cert
+      signed sha256: 5f927276e53193742b8b245ab0b348e259002f3f69dca466d35db18e63c925eb
+
+===== spec: t2bdrm  (rpm: kmod-t2bdrm, modules:t2bdrm) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2bdrm.o
+      MODPOST Module.symvers
+      CC [M]  t2bdrm.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2bdrm.ko
+      BTF [M] t2bdrm.ko
+    Skipping BTF generation for t2bdrm.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2bdrm'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2bdrm built all expected modules:t2bdrm
+PASS  t2bdrm: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2bdrm: signer CN is the throwaway key
+PASS  t2bdrm: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2bdrm: sig_hashalgo sha512
+PASS  t2bdrm: signed content == unsigned build output
+PASS  t2bdrm: CMS signature verifies against the throwaway cert
+      signed sha256: 5cb7463ca593323c864da31153b86b74debeefa6e4a00e1bbed52c9db8ce5df7
+
+===== spec: t2smc  (rpm: kmod-t2smc, modules:t2smc) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2smc.o
+      MODPOST Module.symvers
+      CC [M]  t2smc.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2smc.ko
+      BTF [M] t2smc.ko
+    Skipping BTF generation for t2smc.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2smc'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2smc built all expected modules:t2smc
+PASS  t2smc: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2smc: signer CN is the throwaway key
+PASS  t2smc: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2smc: sig_hashalgo sha512
+PASS  t2smc: signed content == unsigned build output
+PASS  t2smc: CMS signature verifies against the throwaway cert
+      signed sha256: c231e0821cd819bd519ceb4aaed2b9d552cf0d2870413bb8a97230358dac7178
+
+===== spec: t2sbs  (rpm: kmod-t2sbs, modules:t2sbs) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2sbs.o
+      MODPOST Module.symvers
+      CC [M]  t2sbs.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2sbs.ko
+      BTF [M] t2sbs.ko
+    Skipping BTF generation for t2sbs.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2sbs'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2sbs built all expected modules:t2sbs
+PASS  t2sbs: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2sbs: signer CN is the throwaway key
+PASS  t2sbs: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2sbs: sig_hashalgo sha512
+PASS  t2sbs: signed content == unsigned build output
+PASS  t2sbs: CMS signature verifies against the throwaway cert
+      signed sha256: 468c983a958227fb78592261b79435c917cf62c441a7e83037d1f5dc9a39670e
+
+===== spec: t2mfi_fastcharge  (rpm: kmod-t2mfi-fastcharge, modules:t2mfi_fastcharge) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2mfi_fastcharge.o
+      MODPOST Module.symvers
+      CC [M]  t2mfi_fastcharge.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2mfi_fastcharge.ko
+      BTF [M] t2mfi_fastcharge.ko
+    Skipping BTF generation for t2mfi_fastcharge.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2mfi_fastcharge'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2mfi_fastcharge built all expected modules:t2mfi_fastcharge
+PASS  t2mfi_fastcharge: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2mfi_fastcharge: signer CN is the throwaway key
+PASS  t2mfi_fastcharge: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2mfi_fastcharge: sig_hashalgo sha512
+PASS  t2mfi_fastcharge: signed content == unsigned build output
+PASS  t2mfi_fastcharge: CMS signature verifies against the throwaway cert
+      signed sha256: 093b5eb5405d810df15de9c89b7e32e799db4fce13cd0175c2e752ef1ae2bf81
+
+===== spec: t2gmux  (rpm: kmod-t2gmux, modules:t2gmux) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2gmux.o
+      MODPOST Module.symvers
+      CC [M]  t2gmux.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2gmux.ko
+      BTF [M] t2gmux.ko
+    Skipping BTF generation for t2gmux.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2gmux'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2gmux built all expected modules:t2gmux
+PASS  t2gmux: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2gmux: signer CN is the throwaway key
+PASS  t2gmux: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2gmux: sig_hashalgo sha512
+PASS  t2gmux: signed content == unsigned build output
+PASS  t2gmux: CMS signature verifies against the throwaway cert
+      signed sha256: 3c4f335d47cdc910fc461f1b855e16f5d657e4d0b675cbf2d20808e51aafe0a5
+
+===== spec: t2thunderbolt  (rpm: kmod-t2thunderbolt, modules:t2thunderbolt) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2thunderbolt.o
+      MODPOST Module.symvers
+      CC [M]  t2thunderbolt.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2thunderbolt.ko
+      BTF [M] t2thunderbolt.ko
+    Skipping BTF generation for t2thunderbolt.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2thunderbolt'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2thunderbolt built all expected modules:t2thunderbolt
+PASS  t2thunderbolt: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2thunderbolt: signer CN is the throwaway key
+PASS  t2thunderbolt: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2thunderbolt: sig_hashalgo sha512
+PASS  t2thunderbolt: signed content == unsigned build output
+PASS  t2thunderbolt: CMS signature verifies against the throwaway cert
+      signed sha256: 0bb5771354feb4ab3267070b8c106b30b2a0ce6adc9d706b678e3ad0f8f1cf88
+
+===== spec: t2smp  (rpm: kmod-t2smp, modules:t2smp) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2smp.o
+      MODPOST Module.symvers
+      CC [M]  t2smp.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2smp.ko
+      BTF [M] t2smp.ko
+    Skipping BTF generation for t2smp.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2smp'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2smp built all expected modules:t2smp
+PASS  t2smp: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2smp: signer CN is the throwaway key
+PASS  t2smp: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2smp: sig_hashalgo sha512
+PASS  t2smp: signed content == unsigned build output
+PASS  t2smp: CMS signature verifies against the throwaway cert
+      signed sha256: 0ce3b1b905102916fb99c40d07de0d416d312f4b9384450c6afb39155615bdfa
+
+===== spec: t2_precision_trackpad  (rpm: kmod-t2-precision-trackpad, modules:t2_precision_trackpad) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2_precision_trackpad.o
+      MODPOST Module.symvers
+      CC [M]  t2_precision_trackpad.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2_precision_trackpad.ko
+      BTF [M] t2_precision_trackpad.ko
+    Skipping BTF generation for t2_precision_trackpad.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2_precision_trackpad'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2_precision_trackpad built all expected modules:t2_precision_trackpad
+PASS  t2_precision_trackpad: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2_precision_trackpad: signer CN is the throwaway key
+PASS  t2_precision_trackpad: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2_precision_trackpad: sig_hashalgo sha512
+PASS  t2_precision_trackpad: signed content == unsigned build output
+PASS  t2_precision_trackpad: CMS signature verifies against the throwaway cert
+      signed sha256: cd746a4c8b683a5c24443b527cb35d3f73ce8c10c790325d898aa1e200702e32
+
+===== spec: t2_trackpad_actuator  (rpm: kmod-t2-trackpad-actuator, modules:t2_trackpad_actuator) =====
+[make exit 0]
+    warning: pahole version differs from the one used to build the kernel
+      The kernel was built with: 130
+      You are using:             0
+      CC [M]  t2_trackpad_actuator.o
+      MODPOST Module.symvers
+      CC [M]  t2_trackpad_actuator.mod.o
+      CC [M]  .module-common.o
+      LD [M]  t2_trackpad_actuator.ko
+      BTF [M] t2_trackpad_actuator.ko
+    Skipping BTF generation for t2_trackpad_actuator.ko due to unavailability of vmlinux
+    make[1]: Leaving directory '/work/build/t2_trackpad_actuator'
+    make: Leaving directory '/usr/src/kernels/7.2.5-200.fc44.x86_64'
+PASS  t2_trackpad_actuator built all expected modules:t2_trackpad_actuator
+PASS  t2_trackpad_actuator: vermagic 7.2.5-200.fc44.x86_64 SMP preempt mod_unload 
+PASS  t2_trackpad_actuator: signer CN is the throwaway key
+PASS  t2_trackpad_actuator: sig_key 38:13:DE:F4:86:95:5F:14:D6:BA:F6:59:A9:A6:32:DC:7A:73:06:FB
+PASS  t2_trackpad_actuator: sig_hashalgo sha512
+PASS  t2_trackpad_actuator: signed content == unsigned build output
+PASS  t2_trackpad_actuator: CMS signature verifies against the throwaway cert
+      signed sha256: 3dba2371b46a34001b3c57111c1866c20f40bcba65e6c2d2e33f726765f1b908
+
+===== 2. negative control — one flipped byte must break a CMS signature =====
+PASS  tampered content rejected (control on hid_t2magicmouse) — the CMS check is not vacuous
+
+===== 3. depmod against the real 7.2.5-200.fc44.x86_64 module tree (no loading) =====
+installed 18 signed modules into /lib/modules/7.2.5-200.fc44.x86_64/extra/
+
+[depmod exit 0]
+PASS  depmod exit 0 with no warnings and no unresolved symbols
+PASS  every module is present in modules.dep
+$ modprobe --show-depends for t2bce_stack members (resolves, does not load)
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_vhci.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_vhci.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/sound/soundcore.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/sound/core/snd.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/sound/core/snd-timer.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/sound/core/snd-pcm.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_vhci.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_audio.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/drivers/media/mc/mc.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/drivers/media/v4l2-core/videodev.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/drivers/media/common/videobuf2/videobuf2-common.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/drivers/media/common/videobuf2/videobuf2-v4l2.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/drivers/media/common/videobuf2/videobuf2-memops.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/drivers/media/common/videobuf2/videobuf2-vmalloc.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/kernel/drivers/media/v4l2-core/v4l2-mem2mem.ko.xz 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_dma.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_core.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_vhci.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2bce_ave.ko 
+    insmod /lib/modules/7.2.5-200.fc44.x86_64/extra/t2hid.ko 
+
+===== 4. one proof kmod RPM per built spec =====
+$ rpm -qpR kmod-t2bce-stack-0.01-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2bce-stack declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2bce-stack: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2touchbar-0.1-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2touchbar declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2touchbar: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-hid-t2magicmouse-0.1-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-hid-t2magicmouse declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-hid-t2magicmouse: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2bdrm-0.1-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2bdrm declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2bdrm: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2smc-0.1-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2smc declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2smc: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2sbs-0.1-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2sbs declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2sbs: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2mfi-fastcharge-0.1-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2mfi-fastcharge declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2mfi-fastcharge: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2gmux-0.8-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2gmux declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2gmux: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2thunderbolt-0.6-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2thunderbolt declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2thunderbolt: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2smp-0.1-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2smp declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2smp: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2-precision-trackpad-0.01-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2-precision-trackpad declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2-precision-trackpad: all packaged modules verify (vermagic, signer, CMS)
+$ rpm -qpR kmod-t2-trackpad-actuator-0.01-1.x86_64.rpm | grep kernel-core-uname-r
+kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2-trackpad-actuator declares kernel-core-uname-r = 7.2.5-200.fc44.x86_64
+PASS  kmod-t2-trackpad-actuator: all packaged modules verify (vermagic, signer, CMS)
+
+===== 5. status =====
+# A1 kmod build status — 7.2.5-200.fc44.x86_64
+
+| spec | status | rpm | modules |
+| --- | --- | --- | --- |
+| `t2bce_stack` | BUILT | `kmod-t2bce-stack` | t2bce_dma t2bce_core t2bce_vhci t2bce_audio t2bce_ave |
+| `t2touchbar` | BUILT | `kmod-t2touchbar` | t2hid t2touchbar_bl t2touchbar_kbd |
+| `hid_t2magicmouse` | BUILT | `kmod-hid-t2magicmouse` | hid_t2magicmouse |
+| `t2bdrm` | BUILT | `kmod-t2bdrm` | t2bdrm |
+| `t2smc` | BUILT | `kmod-t2smc` | t2smc |
+| `t2sbs` | BUILT | `kmod-t2sbs` | t2sbs |
+| `t2mfi_fastcharge` | BUILT | `kmod-t2mfi-fastcharge` | t2mfi_fastcharge |
+| `t2gmux` | BUILT | `kmod-t2gmux` | t2gmux |
+| `t2thunderbolt` | BUILT | `kmod-t2thunderbolt` | t2thunderbolt |
+| `t2smp` | BUILT | `kmod-t2smp` | t2smp |
+| `t2_precision_trackpad` | BUILT | `kmod-t2-precision-trackpad` | t2_precision_trackpad |
+| `t2_trackpad_actuator` | BUILT | `kmod-t2-trackpad-actuator` | t2_trackpad_actuator |
+
+- specs attempted: 12
+- specs built: 12
+- modules signed: 18
+- rpms produced: 12
+- kmod tree: /lib/modules/7.2.5-200.fc44.x86_64/extra/
+
+=== MANIFEST.txt ===
+# bluefin-t2 A1 kmod manifest
+# kver: 7.2.5-200.fc44.x86_64
+# built: 2026-10-20T11:33:25Z in bluefin-t2-proof:7.2.5
+# signature: bluefin-t2 THROWAWAY proof key - NOT PRODUCTION (THROWAWAY, not production)
+# columns: rpm_file<TAB>sha256<TAB>modules<TAB>kver
+kmod-t2bce-stack-0.01-1.x86_64.rpm	7ff0f3184c7474e1b01919e634b1d4c73deb4e34d609e973c4f395d8f6758a94	t2bce_dma,t2bce_core,t2bce_vhci,t2bce_audio,t2bce_ave	7.2.5-200.fc44.x86_64
+kmod-t2touchbar-0.1-1.x86_64.rpm	18258c1e2724e4b1daa1519570f41c23623f1b79fc8cc5ec801320a0f44e5ca1	t2hid,t2touchbar_bl,t2touchbar_kbd	7.2.5-200.fc44.x86_64
+kmod-hid-t2magicmouse-0.1-1.x86_64.rpm	bc635ae0b375ddc075a9a6c6a2b9520ab7d7c66479d45a5e1a69557b17ce3952	hid_t2magicmouse	7.2.5-200.fc44.x86_64
+kmod-t2bdrm-0.1-1.x86_64.rpm	1a173db0d0fd172fd81c170545b9b6beb0c89ae3fe52e46c8f941e51cb98120f	t2bdrm	7.2.5-200.fc44.x86_64
+kmod-t2smc-0.1-1.x86_64.rpm	fe52b723fd071c450854299248d98f13b5a132b5c370da43e39ae557aaeae7e0	t2smc	7.2.5-200.fc44.x86_64
+kmod-t2sbs-0.1-1.x86_64.rpm	2f71130a4a60820b01b8f50b26181abf4bb3ab25022e517a52cfd31e006a470a	t2sbs	7.2.5-200.fc44.x86_64
+kmod-t2mfi-fastcharge-0.1-1.x86_64.rpm	58b51d094423e9b9139e77a9d73f6e0d6590f65249aca05d397496ba3aed8237	t2mfi_fastcharge	7.2.5-200.fc44.x86_64
+kmod-t2gmux-0.8-1.x86_64.rpm	300b402ac14d9f56bae8d9bc6ce697c5491f835742d11e486b120c05839db3d5	t2gmux	7.2.5-200.fc44.x86_64
+kmod-t2thunderbolt-0.6-1.x86_64.rpm	b2c5dfc756fd0289ac282fef89391c920385169c881fbb4f2a8f3ef954a2e3b0	t2thunderbolt	7.2.5-200.fc44.x86_64
+kmod-t2smp-0.1-1.x86_64.rpm	6ea2587f0803fc18bb512adaa74219ab00984ec45d08aac8439bb85f2075ea92	t2smp	7.2.5-200.fc44.x86_64
+kmod-t2-precision-trackpad-0.01-1.x86_64.rpm	6278672929d52c5879d5927a5665be3221164363856a524ef910436837a52315	t2_precision_trackpad	7.2.5-200.fc44.x86_64
+kmod-t2-trackpad-actuator-0.01-1.x86_64.rpm	b18da9034d18473f704d0ee8ab72bb239faad0d08fc9be46f76779d17ae6582e	t2_trackpad_actuator	7.2.5-200.fc44.x86_64
+
+===== 6. artifacts =====
+/out/modules:
+total 13912
+drwxr-xr-x. 1 root root     496 Oct 20 11:33 .
+drwxr-xr-x. 1 root root      72 Oct 20 11:31 ..
+-rw-r--r--. 1 root root  740621 Oct 20 11:32 hid_t2magicmouse.ko
+-rw-r--r--. 1 root root  642693 Oct 20 11:32 t2_precision_trackpad.ko
+-rw-r--r--. 1 root root  566621 Oct 20 11:33 t2_trackpad_actuator.ko
+-rw-r--r--. 1 root root 1512509 Oct 20 11:31 t2bce_audio.ko
+-rw-r--r--. 1 root root 1709237 Oct 20 11:31 t2bce_ave.ko
+-rw-r--r--. 1 root root 1063829 Oct 20 11:31 t2bce_core.ko
+-rw-r--r--. 1 root root  561653 Oct 20 11:31 t2bce_dma.ko
+-rw-r--r--. 1 root root 1397893 Oct 20 11:31 t2bce_vhci.ko
+-rw-r--r--. 1 root root  640917 Oct 20 11:32 t2bdrm.ko
+-rw-r--r--. 1 root root  734269 Oct 20 11:32 t2gmux.ko
+-rw-r--r--. 1 root root  686605 Oct 20 11:31 t2hid.ko
+-rw-r--r--. 1 root root  429669 Oct 20 11:32 t2mfi_fastcharge.ko
+-rw-r--r--. 1 root root  458541 Oct 20 11:32 t2sbs.ko
+-rw-r--r--. 1 root root 1053933 Oct 20 11:32 t2smc.ko
+-rw-r--r--. 1 root root  464237 Oct 20 11:32 t2smp.ko
+-rw-r--r--. 1 root root  420461 Oct 20 11:32 t2thunderbolt.ko
+-rw-r--r--. 1 root root  532997 Oct 20 11:31 t2touchbar_bl.ko
+-rw-r--r--. 1 root root  592613 Oct 20 11:31 t2touchbar_kbd.ko
+
+/out/rpms:
+total 3136
+drwxr-xr-x. 1 root root     802 Oct 20 11:33 .
+drwxr-xr-x. 1 root root      72 Oct 20 11:31 ..
+-rw-r--r--. 1 root root  195496 Oct 20 11:33 kmod-hid-t2magicmouse-0.1-1.x86_64.rpm
+-rw-r--r--. 1 root root  176648 Oct 20 11:33 kmod-t2-precision-trackpad-0.01-1.x86_64.rpm
+-rw-r--r--. 1 root root  158599 Oct 20 11:33 kmod-t2-trackpad-actuator-0.01-1.x86_64.rpm
+-rw-r--r--. 1 root root 1183955 Oct 20 11:33 kmod-t2bce-stack-0.01-1.x86_64.rpm
+-rw-r--r--. 1 root root  171692 Oct 20 11:33 kmod-t2bdrm-0.1-1.x86_64.rpm
+-rw-r--r--. 1 root root  187906 Oct 20 11:33 kmod-t2gmux-0.8-1.x86_64.rpm
+-rw-r--r--. 1 root root  117846 Oct 20 11:33 kmod-t2mfi-fastcharge-0.1-1.x86_64.rpm
+-rw-r--r--. 1 root root  125278 Oct 20 11:33 kmod-t2sbs-0.1-1.x86_64.rpm
+-rw-r--r--. 1 root root  254587 Oct 20 11:33 kmod-t2smc-0.1-1.x86_64.rpm
+-rw-r--r--. 1 root root  129572 Oct 20 11:33 kmod-t2smp-0.1-1.x86_64.rpm
+-rw-r--r--. 1 root root  120750 Oct 20 11:33 kmod-t2thunderbolt-0.6-1.x86_64.rpm
+-rw-r--r--. 1 root root  367895 Oct 20 11:33 kmod-t2touchbar-0.1-1.x86_64.rpm
+
+RESULT: 12/12 specs built, 18/18 modules signed, 12/12 RPMs
+ALL EXPECTED ARTIFACTS PRESENT

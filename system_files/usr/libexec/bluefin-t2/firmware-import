@@ -1,0 +1,107 @@
+#!/bin/bash
+# firmware-import — carry the installer's per-machine Apple firmware into /var.
+#
+# Runs on the installed system as bluefin-t2-firmware-import.service, conditioned on the
+# SHA256SUMS marker the installer wrote onto the target ESP (design R2-3 and §6). The
+# payload is per-machine Apple firmware read from the running macOS; it is never in the
+# image, and this helper never writes back to the ESP.
+#
+# What it does, in order:
+#   1. verify the payload against its own SHA256SUMS before trusting any of it;
+#   2. refuse to start a copy that does not fit on the target filesystem;
+#   3. copy the payload files (not the checksum list) to /var/lib/firmware/brcm;
+#   4. verify the destination, then record state in /var/lib/bluefin-t2/firmware.state —
+#      outside the watched path, so the .path unit cannot re-trigger on this output;
+#   5. reload brcmfmac so a driver that already failed its firmware load binds now.
+#
+# Exits 0 when there is nothing to import: the service condition already covers absence,
+# and a machine with no payload must boot and report, not fail.
+
+set -euo pipefail
+
+SRC=/boot/efi/kait2en/firmware/wifi
+SUMS=$SRC/SHA256SUMS
+DST=/var/lib/firmware/brcm
+STATE_DIR=/var/lib/bluefin-t2
+STATE=$STATE_DIR/firmware.state
+HEADROOM=$((8 * 1024 * 1024))
+
+die() { echo "firmware-import: $*" >&2; exit 1; }
+log() { echo "firmware-import: $*"; }
+
+[[ -f "$SUMS" ]] || { log "no payload at $SUMS — nothing to import"; exit 0; }
+
+# --- 1. verify the source before copying anything -------------------------------------
+( cd "$SRC" && sha256sum -c --strict --quiet SHA256SUMS ) \
+    || die "payload checksum verification failed in $SRC; refusing to import it"
+
+payload_sha="$(sha256sum "$SUMS" | cut -d' ' -f1)"
+
+# --- destination verification, used before and after the copy -------------------------
+verify_dst() {
+    local sum file base
+    while read -r sum file; do
+        [[ -n "${sum:-}" && "$sum" != \#* ]] || continue
+        file="${file#\*}"
+        base="$(basename "$file")"
+        [[ -f "$DST/$base" ]] || return 1
+        [[ "$(sha256sum "$DST/$base" | cut -d' ' -f1)" == "$sum" ]] || return 1
+    done <"$SUMS"
+    return 0
+}
+
+mkdir -p "$DST"
+
+if [[ -f "$STATE" ]] && grep -qxF "payload_sha256=$payload_sha" "$STATE" && verify_dst; then
+    log "payload $payload_sha already imported; nothing to do"
+    exit 0
+fi
+
+# --- 2. free space on the target ------------------------------------------------------
+need="$(du -sb "$SRC" | cut -f1)"
+avail="$(df -B1 --output=avail "$DST" | tail -1)"
+if (( avail < need + HEADROOM )); then
+    die "not enough free space in $DST for the payload: need $need bytes + $HEADROOM headroom, have $avail"
+fi
+
+# --- 3. copy the payload files, never the checksum list -------------------------------
+shopt -s nullglob
+copied=0
+for f in "$SRC"/*; do
+    [[ -f "$f" ]] || continue
+    [[ "$(basename "$f")" == SHA256SUMS ]] && continue
+    install -m 0644 -o root -g root "$f" "$DST/"
+    copied=$((copied + 1))
+done
+(( copied > 0 )) || die "payload at $SRC contains no firmware files"
+log "copied $copied firmware file(s) into $DST"
+
+verify_dst || die "destination verification failed after the copy; the imported payload is incomplete"
+
+# --- 4. record the outcome outside the watched path -----------------------------------
+mkdir -p "$STATE_DIR"
+tmp="$(mktemp "$STATE_DIR/.firmware.state.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+{
+    echo "imported_at=$(date -Is)"
+    echo "payload_sha256=$payload_sha"
+    echo "source=$SRC"
+    echo "files=$copied"
+    if [[ -f /etc/bluefin-t2/firmware-import.json ]]; then
+        echo "import_json=/etc/bluefin-t2/firmware-import.json"
+    fi
+} >"$tmp"
+chmod 0644 "$tmp"
+mv -f "$tmp" "$STATE"
+trap - EXIT
+log "wrote $STATE"
+
+# --- 5. let a driver that already failed bind now -------------------------------------
+for m in brcmfmac_wcc brcmfmac; do
+    /usr/sbin/modprobe -r "$m" 2>/dev/null || true
+done
+if /usr/sbin/modprobe brcmfmac 2>/dev/null; then
+    log "reloaded brcmfmac"
+else
+    log "warning: brcmfmac did not reload; a reboot loads it from the imported firmware"
+fi

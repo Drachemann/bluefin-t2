@@ -1,0 +1,14 @@
+[Unit]
+Description=bluefin-t2: group membership and Touch ID binding for human accounts
+Documentation=file:/usr/share/bluefin-t2/RECOVERY.md
+After=systemd-sysusers.service local-fs.target
+ConditionPathExists=/etc/passwd
+# Root oneshot: no polkit, no pkexec, no session race. See the 2026-10-22 correction in
+# docs/designs/kait2en-bluefin-v2.md (R2-9).
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bluefin-t2/user-groups
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=bluefin-t2: watch for the firmware payload on the target ESP
+
+[Path]
+# Watch the marker the writer creates, never the directory the service writes to. The
+# service copies to /var/lib/firmware/brcm and records state in /var/lib/bluefin-t2, both
+# outside this path, so it cannot re-trigger on its own output (design §6).
+PathExists=/boot/efi/kait2en/firmware/wifi/SHA256SUMS
+Unit=bluefin-t2-firmware-import.service
+
+[Install]
+WantedBy=multi-user.target

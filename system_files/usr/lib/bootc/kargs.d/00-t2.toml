@@ -1,0 +1,27 @@
+# bluefin-t2 — kernel arguments, as a named set of 13.
+#
+# The list comes from KAIT2EN's ADD_ARGS (ten entries, install-kernel-args.sh:67-78) plus
+# the two appended at :109 and :124, which is the twelve /proc/cmdline shows on the target,
+# plus `firmware_class.path`, which is ours (see design §6, "The kargs set, named").
+#
+# `module_blacklist` is what keeps the stock Apple drivers from binding before our T2
+# versions: on a T2 Mac the upstream applesmc/hid_apple path does not work, and whichever
+# driver probes first owns the device.
+#
+# Asserted exactly, by diff, in build_files/90-tests.sh. A count assertion is not used:
+# it passes when the set is wrong and the arithmetic matches.
+kargs = [
+  "amdgpu.aspm=1",
+  "i915.enable_guc=2",
+  "intel_iommu=on",
+  "iommu=pt",
+  "pm_async=off",
+  "brcmfmac.p2pon=0",
+  "pcie_aspm=force",
+  "pcie_aspm.policy=powersave",
+  "pcie_ports=compat",
+  "mem_sleep_default=deep",
+  "initcall_blacklist=cmos_init,magicmouse_driver_init",
+  "module_blacklist=acpi_tad,applesmc,macsmc,hid_apple,hid_appletb_bl,hid_appletb_kbd,hid_magicmouse,appletbdrm,apple_bce,apple_mfi_fastcharge,apple_gmux,sbs",
+  "firmware_class.path=/var/lib/firmware",
+]

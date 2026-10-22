@@ -1,0 +1,22 @@
+[Unit]
+Description=bluefin-t2: import the per-machine Apple firmware payload
+Documentation=file:/usr/share/bluefin-t2/MODELS.md
+# The installer carries the payload onto the target ESP (design R2-3). SHA256SUMS is the
+# marker the writer creates: a half-written payload has no checksum list, so conditioning
+# on it — and not on the directory — is what keeps a partial copy out.
+ConditionPathExists=/boot/efi/kait2en/firmware/wifi/SHA256SUMS
+RequiresMountsFor=/boot/efi
+After=local-fs.target network-pre.target
+Wants=network-pre.target
+Before=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bluefin-t2/firmware-import
+TimeoutStartSec=180
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

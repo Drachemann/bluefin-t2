@@ -1,0 +1,310 @@
+#!/usr/bin/env bash
+# /usr/libexec/bluefin-t2-hil/interactive-checks — the post-install checklist, for a
+# human, in a logged-in desktop session on the booted bench system.
+#
+# The booted smoke test (`smoke-test`) can only measure what a root oneshot can measure:
+# module set, firmware, Wi-Fi, failed units. The items below need a session or a human:
+# the Touch Bar as a real display, the fingerprint at the lock screen, audio through the
+# speakers, a suspend cycle. Run this from a terminal in the session; it never changes
+# state except writing `interactive.log` into the run directory on the results stick.
+#
+# Usage: interactive-checks [--no-write]
+
+set -uo pipefail
+
+SELF_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+WRITE=1
+for arg in "$@"; do
+  case $arg in
+    --no-write) WRITE=0 ;;
+    -h|--help) printf 'usage: %s [--no-write]\n' "${0##*/}"; exit 0 ;;
+    *) printf 'usage: %s [--no-write]\n' "${0##*/}" >&2; exit 2 ;;
+  esac
+done
+
+OUT=""
+pass() { printf 'PASS  %s\n' "$*"; OUT+="PASS  $*\n"; }
+fail() { printf 'FAIL  %s\n' "$*"; OUT+="FAIL  $*\n"; }
+info() { printf 'INFO  %s\n' "$*"; OUT+="INFO  $*\n"; }
+manual() { printf 'TODO  %s\n' "$*"; OUT+="TODO  $*\n"; }
+
+# First session: the first-run dialog has not run yet, so the one-reboot step KaiT2EN
+# documents is still pending. Failures that resolve on that reboot are reported as such.
+first_run_state="${XDG_STATE_HOME:-$HOME/.local/state}/bluefin-t2/first-run.done"
+first_session=0
+[[ -e $first_run_state ]] || first_session=1
+
+printf 'bluefin-t2 interactive checks — %s\n\n' "$(date -Is)"
+
+# --- session -----------------------------------------------------------------
+if [[ -n ${WAYLAND_DISPLAY:-} || -n ${DISPLAY:-} ]]; then
+  pass "graphical session (${XDG_SESSION_TYPE:-unknown}) as ${USER:-unknown}"
+else
+  fail "no graphical session in this environment (run from a terminal in the desktop session)"
+fi
+
+# --- Touch Bar ---------------------------------------------------------------
+if systemctl --user is-active --quiet kait2en-touchbar.service; then
+  pass "kait2en-touchbar.service (user) is active"
+else
+  fail "kait2en-touchbar.service (user) is not active: systemctl --user status kait2en-touchbar.service"
+fi
+if [[ "$(systemctl --global is-enabled kait2en-touchbar.service 2>/dev/null)" == enabled ]] \
+   || [[ -L /etc/systemd/user/graphical-session.target.wants/kait2en-touchbar.service ]]; then
+  pass "kait2en-touchbar.service is enabled globally"
+else
+  fail "kait2en-touchbar.service is not enabled globally (the attach unit will refuse to run)"
+fi
+if systemctl is-active --quiet kait2en-touchbar-attach.service; then
+  pass "kait2en-touchbar-attach.service is active"
+fi
+# It is a oneshot: after a successful run it is inactive, and that is not a failure. Ask
+# systemd for the result instead of reading the state as a verdict.
+if ! systemctl is-active --quiet kait2en-touchbar-attach.service; then
+  attach_result=$(systemctl show -p Result --value kait2en-touchbar-attach.service 2>/dev/null || true)
+  attach_type=$(systemctl show -p Type --value kait2en-touchbar-attach.service 2>/dev/null || true)
+  if [[ $attach_type == oneshot && $attach_result == success ]]; then
+    pass "kait2en-touchbar-attach.service finished successfully (oneshot, inert by design)"
+  else
+    fail "kait2en-touchbar-attach.service did not succeed (Type=$attach_type Result=$attach_result)"
+  fi
+fi
+if grep -qi 'touch bar' /proc/bus/input/devices 2>/dev/null; then
+  pass "the Touch Bar input device is present"
+else
+  fail "no Touch Bar input device in /proc/bus/input/devices"
+fi
+if [[ -e /sys/class/backlight/t2tb_backlight || -e /sys/class/backlight/appletb_backlight ]]; then
+  pass "the Touch Bar backlight device exists"
+else
+  fail "no t2tb_backlight/appletb_backlight device"
+fi
+manual "look at the Touch Bar: it should show the bluefin-t2 row, respond to touch, and the Fn row should work"
+
+# --- first-login provisioning ------------------------------------------------
+# bluefin-t2-first-login adds the desktop user to kait2en-touchbar (the group the udev rule
+# and the daemon need). Its absence is the classic silent failure: every module loads and
+# the Touch Bar still cannot open its device.
+if [[ " $(id -nG) " == *" kait2en-touchbar "* ]]; then
+  pass "the desktop user is in the kait2en-touchbar group"
+else
+  fail "the desktop user is NOT in kait2en-touchbar (log out and in, or check bluefin-t2-first-login.service)"
+fi
+
+# --- keyboard and trackpad ---------------------------------------------------
+for dev in 'Apple Internal Keyboard / Trackpad' 'Apple SPI Keyboard' 'Apple SPI Touchpad'; do
+  if grep -qF "$dev" /proc/bus/input/devices 2>/dev/null; then
+    pass "input device present: $dev"
+  fi
+done
+if grep -q 'Apple Internal Keyboard / Trackpad' /proc/bus/input/devices 2>/dev/null; then :; else
+  info "the compositor's device names may differ; check that the keyboard and trackpad work"
+fi
+
+# --- fingerprint -------------------------------------------------------------
+if authselect current 2>/dev/null | grep -qx -- '- with-fingerprint'; then
+  pass "PAM fingerprint is enabled (authselect with-fingerprint)"
+else
+  fail "PAM fingerprint is not enabled"
+fi
+if command -v fprintd-list >/dev/null 2>&1; then
+  prints_rc=0
+  prints=$(fprintd-list "$USER" 2>&1) || prints_rc=$?
+  # 2026-10-22: the old check called any non-empty output a pass, so the bridge's absence
+  # ("No devices available") was reported as PASS. An error is a failure, not a print.
+  if (( prints_rc != 0 )) || printf '%s' "$prints" | grep -qiE 'no devices available|no fingers|error|not found|not authorized'; then
+    if (( first_session )); then
+      info "fprintd has no device yet on this first session: ${prints:-no output}"
+      manual "the first-run dialog asks for one reboot; Touch ID appears at the next login"
+    else
+      fail "fprintd cannot reach a fingerprint device: ${prints:-no output}"
+      info "the T2 bridge must be running: systemctl status kait2en-t2-touchid.service"
+    fi
+  elif printf '%s' "$prints" | grep -qi 'no prints'; then
+    info "no fingerprints bound yet for $USER — the macOS-enrolled finger binds at login"
+    manual "log out and in (the bridge binds it), or fprintd-enroll with a touch; then lock the screen"
+  elif [[ -n $prints ]]; then
+    pass "fprintd has fingerprint(s) for $USER"
+    manual "lock the screen and confirm the fingerprint unlocks it"
+  else
+    fail "fprintd-list produced nothing and exited 0"
+  fi
+else
+  fail "fprintd-list is not installed"
+fi
+
+# --- the T2 CDC-NCM link (Touch ID bridge and t2remote both need it) ----------
+t2iface=""
+for n in /sys/class/net/*; do
+  d=$(readlink -f "$n/device/driver" 2>/dev/null || true)
+  if [[ ${d##*/} == cdc_ncm ]]; then t2iface=${n##*/}; break; fi
+done
+if [[ -n $t2iface ]]; then
+  if ip -6 addr show dev "$t2iface" scope link 2>/dev/null | grep -q 'inet6 fe80'; then
+    pass "T2 CDC-NCM link $t2iface has an IPv6 link-local address"
+  else
+    if (( first_session )); then
+      info "T2 CDC-NCM link $t2iface has no IPv6 yet on this first session; the first-run reboot settles it"
+    else
+      fail "T2 CDC-NCM link $t2iface has no IPv6 link-local: NetworkManager must autoconnect the 'Apple T2 Bridge' profile"
+    fi
+  fi
+else
+  info "no CDC-NCM interface found (not a T2 machine, or t2bce_ave is not loaded)"
+fi
+if journalctl -b -u kait2en-t2-touchid.service 2>/dev/null | grep -q 'cannot reach the sensor'; then
+  if (( first_session )); then
+    info "the Touch ID bridge has not reached the sensor yet on this first session; the first-run reboot settles it"
+  else
+    fail "the Touch ID bridge cannot reach the T2 sensor: $(journalctl -b -u kait2en-t2-touchid.service 2>/dev/null | grep 'cannot reach' | tail -1)"
+  fi
+fi
+
+# --- native audio DSP --------------------------------------------------------
+card_id=""
+for c in /sys/class/sound/card[0-9]*; do
+  id=$(cat "$c/id" 2>/dev/null || true)
+  case $id in t2-*) card_id=$id; break ;; esac
+done
+if [[ -n $card_id ]]; then
+  pass "ALSA card id is $card_id (the DSP udev rename applied)"
+else
+  fail "no t2-* ALSA card id: the DSP udev rule did not rename the T2 audio card"
+fi
+if wpctl status 2>/dev/null | sed -n '/Filters:/,/^$/p' | grep -q 't2-'; then
+  pass "the t2 DSP filter chain is loaded in this session"
+else
+  fail "no t2 DSP filter chain in wpctl (the speakers are running without the model DSP)"
+fi
+
+# --- audio -------------------------------------------------------------------
+if command -v wpctl >/dev/null 2>&1; then
+  if wpctl status 2>/dev/null | grep -qE 'Sinks:|Audio/Sink'; then
+    sink_count=$(wpctl status 2>/dev/null | sed -n '/Audio/,/Video/p' | grep -cE '\[vol:' || true)
+    if (( sink_count > 0 )); then
+      pass "PipeWire has $sink_count audio sink(s) in this session"
+    else
+      fail "PipeWire has no audio sink: the DSP sink is not registered"
+    fi
+  else
+    fail "wpctl status shows no audio section"
+  fi
+else
+  info "wpctl not available; play a sound and confirm the speakers work"
+fi
+manual "play a sound (e.g. speaker-test or a media file) and confirm the internal speakers, then plug in headphones"
+
+# --- fans and thermal --------------------------------------------------------
+if compgen -G '/sys/class/hwmon/hwmon*/name' >/dev/null 2>&1; then
+  if grep -lq 't2smc' /sys/class/hwmon/hwmon*/name 2>/dev/null; then
+    pass "t2smc is exposing a hwmon device (fans and temperature channels)"
+  else
+    fail "no t2smc hwmon device: the SMC driver is not bound"
+  fi
+fi
+
+# --- system hygiene: the regressions the first boots had ----------------------
+# These are the failures found by reading the journal after the bench boots. Checked here
+# so one boot answers all of them; the scored smoke test carries the same blacklist and
+# group assertions for the no-human case.
+failed_system=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}')
+if [[ -z $failed_system ]]; then
+  pass "no failed system units"
+else
+  fail "failed system units: $(echo $failed_system)"
+fi
+failed_user=$(systemctl --user --failed --no-legend --plain 2>/dev/null | awk '{print $1}')
+if [[ -z $failed_user ]]; then
+  pass "no failed user units in this session"
+else
+  ours=$(printf '%s\n' $failed_user | grep -E 'bluefin-t2|kait2en|^t2-' || true)
+  if [[ -n $ours ]]; then
+    fail "failed bluefin-t2 user units: $(echo $ours)"
+  else
+    info "inherited user units failed (base image, not ours): $(echo $failed_user)"
+  fi
+fi
+
+if journalctl -b -n1 >/dev/null 2>&1; then
+  if journalctl -b --no-pager 2>/dev/null | grep -q 'kait2en-touchbar.*Failed with result'; then
+    fail "the Touch Bar unit restarted this boot: $(journalctl -b --no-pager 2>/dev/null | grep 'kait2en-touchbar.*Failed' | tail -n1)"
+  else
+    pass "the Touch Bar unit did not restart this boot (greeter session skipped)"
+  fi
+  blacklist=$(journalctl -k -b --no-pager 2>/dev/null | grep -c 'is blacklisted' || true)
+  if (( blacklist == 0 )); then
+    pass "no 'Module ... is blacklisted' lines (silent blacklist applied)"
+  else
+    fail "$blacklist blacklisted-module lines this boot: /etc/modprobe.d/kait2en-silent-blacklist.conf is missing or stale"
+  fi
+  avc_total=$(journalctl -b --no-pager 2>/dev/null | grep -c 'avc: *denied' || true)
+  avc_ours=$(journalctl -b --no-pager 2>/dev/null | grep 'avc: *denied' | grep -cE 'bluefin-t2|kait2en' || true)
+  if (( avc_ours == 0 )); then
+    info "$avc_total SELinux denial(s) this boot, none naming bluefin-t2/kait2en (base-policy noise; the host has its own)"
+  else
+    fail "$avc_ours SELinux denial(s) name bluefin-t2/kait2en: $(journalctl -b --no-pager 2>/dev/null | grep 'avc: *denied' | grep -E 'bluefin-t2|kait2en' | head -n2)"
+  fi
+else
+  info "journal not readable as this user; journal-based hygiene checks skipped"
+fi
+
+for u in bluefin-t2-nm-bridge bluefin-t2-dsp bluefin-t2-firmware-import bluefin-t2-user-groups; do
+  state=$(systemctl show -p Result --value "$u" 2>/dev/null || true)
+  [[ -n $state ]] || state=unknown
+  case $state in
+    success|unknown) pass "$u result: $state" ;;
+    *) fail "$u result: $state (read: journalctl -b -u $u)" ;;
+  esac
+done
+
+missing_groups=""
+for g in disk video audio render kvm tty; do
+  getent group "$g" >/dev/null 2>&1 || missing_groups="$missing_groups $g"
+done
+if [[ -z $missing_groups ]]; then
+  pass "standard groups resolve (disk video audio render kvm tty)"
+else
+  fail "standard groups do not resolve:$missing_groups (nsswitch/authselect regression)"
+fi
+
+if [[ -d /sys/class/bluetooth/hci0 ]]; then
+  pass "Bluetooth controller hci0 present"
+else
+  info "no hci0: check lspci and the hci_uart binding (the T2 Bluetooth is on serial0)"
+fi
+
+if journalctl -k -b >/dev/null 2>&1; then
+  info "known inherited noise this boot: t2magicmouse -32 x$(journalctl -k -b --no-pager 2>/dev/null | grep -c 'unable to request touch data') , ACPI SSDT duplicate x$(journalctl -k -b --no-pager 2>/dev/null | grep -c 'AE_ALREADY_EXISTS') , taint=$(cat /proc/sys/kernel/tainted 2>/dev/null || echo unknown)"
+fi
+
+# --- hub and report ----------------------------------------------------------
+if bluefin-t2 --check-gui >/dev/null 2>&1; then
+  pass "the hub's page model builds ($(bluefin-t2 --check-gui 2>&1 | head -n1))"
+else
+  fail "bluefin-t2 --check-gui failed"
+fi
+rc=0
+report=$(bluefin-t2 report 2>&1) || rc=$?
+case $rc in
+  0) pass "bluefin-t2 report: ok (exit 0)" ;;
+  1) fail "bluefin-t2 report: not-ok (exit 1) — read the Problems rows" ;;
+  2) info "bluefin-t2 report: model not in the supported set (exit 2)" ;;
+  *) fail "bluefin-t2 report exited $rc" ;;
+esac
+manual "open the app grid and launch bluefin-t2; click through all nine pages. Not scriptable: window layout and interaction"
+manual "suspend (close the lid or systemctl suspend), wake it, and confirm the keyboard, trackpad and Touch Bar still work"
+manual "check Wi-Fi and Bluetooth connect after resume, not just after boot"
+
+# --- persist ----------------------------------------------------------------
+if (( WRITE == 1 )); then
+  if [[ -f $SELF_DIR/lib.sh ]]; then
+    # shellcheck source=/dev/null
+    source "$SELF_DIR/lib.sh"
+    if hil_ensure_results_mount >/dev/null 2>&1 && run_dir=$(hil_run_dir 2>/dev/null); then
+      printf '%b' "$OUT" > "$run_dir/interactive.log"
+      printf '\nwrote %s/interactive.log\n' "$run_dir"
+    else
+      printf '\nresults stick not available; not written (use --no-write to silence)\n'
+    fi
+  fi
+fi

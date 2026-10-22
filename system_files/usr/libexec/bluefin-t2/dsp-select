@@ -1,0 +1,122 @@
+#!/usr/bin/bash
+# dsp-select — install the PipeWire DSP graph that belongs to this Mac model.
+#
+# The graphs are host-side processing (LV2 filter chains), not Apple firmware: they ship in
+# the image at /usr/share/t2-dsp/pipewire/<profile>.conf, one per model. PipeWire only
+# reads a graph it is told about in /etc/pipewire/pipewire.conf.d/, so one of them has to be
+# selected for *this* machine.
+#
+# Upstream does that in the RPM %post, which works when the package is installed on the
+# target. A multi-model image cannot do that at build time — the build host's DMI is not the
+# user's — so the selection runs here, at boot, as bluefin-t2-dsp.service.
+#
+# Ownership rule: a local edit is preserved. The state file records what this helper wrote
+# (profile and sha256); a file whose content is not what the state file records is treated
+# as administrator-owned and left alone.
+
+set -euo pipefail
+
+DRY_RUN=0
+ROOT=""
+DMI_FILE=""
+MODELS=""
+GRAPHS=""
+STATE=""
+TARGET=""
+
+usage() {
+    cat <<'EOF'
+usage: dsp-select [--dry-run] [--root DIR] [--dmi-file FILE]
+                  [--models FILE] [--graphs DIR] [--state FILE] [--target FILE]
+EOF
+}
+
+while (( $# )); do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --root)    ROOT="${2:?--root needs a value}"; shift 2 ;;
+        --dmi-file) DMI_FILE="${2:?--dmi-file needs a value}"; shift 2 ;;
+        --models)  MODELS="${2:?--models needs a value}"; shift 2 ;;
+        --graphs)  GRAPHS="${2:?--graphs needs a value}"; shift 2 ;;
+        --state)   STATE="${2:?--state needs a value}"; shift 2 ;;
+        --target)  TARGET="${2:?--target needs a value}"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "dsp-select: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+log() { echo "dsp-select: $*"; }
+
+# All paths are absolute inside the image; --root exists so the gate can run this against a
+# fixture without touching the build's own /etc.
+in_root() { printf '%s%s' "$ROOT" "$1"; }
+
+DMI_FILE="${DMI_FILE:-/sys/class/dmi/id/product_name}"
+MODELS="${MODELS:-$(in_root /usr/share/t2-dsp/models.json)}"
+GRAPHS="${GRAPHS:-$(in_root /usr/share/t2-dsp/pipewire)}"
+TARGET="${TARGET:-$(in_root /etc/pipewire/pipewire.conf.d/51-t2-dsp.conf)}"
+STATE="${STATE:-$(in_root /var/lib/bluefin-t2/dsp.state)}"
+
+[[ -f "$MODELS" ]] || { echo "dsp-select: model map missing: $MODELS" >&2; exit 1; }
+[[ -r "$DMI_FILE" ]] || { echo "dsp-select: cannot read DMI: $DMI_FILE" >&2; exit 1; }
+
+model=$(tr -d '\n' < "$DMI_FILE")
+profile=$(python3 - "$MODELS" "$model" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    models = json.load(handle)
+print(models.get(sys.argv[2], ""))
+PY
+)
+
+sha_of() { sha256sum "$1" | cut -d' ' -f1; }
+
+state_profile=""
+state_sha=""
+if [[ -f "$STATE" ]]; then
+    read -r state_profile state_sha < "$STATE" || true
+fi
+
+# An unsupported model is not an error: this image may boot on a machine it does not claim
+# (a VM, another Mac). Withdraw our own previously-selected graph, never someone else's.
+if [[ -z "$profile" ]]; then
+    if [[ -n "$state_profile" && -f "$TARGET" ]] && [[ "$(sha_of "$TARGET")" == "$state_sha" ]]; then
+        log "unsupported model '$model'; removing the graph this helper selected"
+        if (( DRY_RUN )); then exit 0; fi
+        rm -f "$TARGET" "$STATE"
+    else
+        log "no DSP graph for model '$model'; leaving PipeWire configuration untouched"
+    fi
+    exit 0
+fi
+
+source="$GRAPHS/$profile.conf"
+[[ -f "$source" ]] || { echo "dsp-select: graph missing for $model: $source" >&2; exit 1; }
+want_sha=$(sha_of "$source")
+
+if [[ -f "$TARGET" ]]; then
+    have_sha=$(sha_of "$TARGET")
+    if [[ "$have_sha" != "$want_sha" ]]; then
+        if [[ -n "$state_profile" && "$have_sha" == "$state_sha" ]]; then
+            : # ours, a different profile (the disk moved between models); replace below
+        else
+            log "preserving local PipeWire configuration at $TARGET"
+            exit 0
+        fi
+    fi
+fi
+
+if (( DRY_RUN )); then
+    log "would install graph $profile for $model at $TARGET"
+    exit 0
+fi
+
+mkdir -p "$(dirname "$TARGET")" "$(dirname "$STATE")"
+tmp=$(mktemp "$(dirname "$TARGET")/.51-t2-dsp.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+install -m 0644 "$source" "$tmp"
+mv -f "$tmp" "$TARGET"
+printf '%s %s\n' "$profile" "$want_sha" > "$STATE"
+log "installed graph $profile for $model at $TARGET"

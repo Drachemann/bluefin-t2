@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# /usr/libexec/bluefin-t2-hil/stage-log — append one stage line and fsync it.
+#
+# Called by bluefin-t2-hil-early.service (early -> sysinit.target) and
+# bluefin-t2-hil-userspace.service (userspace -> multi-user.target). R2-11's stages.log
+# is the artifact that splits "kernel died" from "userspace died", so a line is written
+# and flushed to the results stick before the target is considered reached.
+#
+# Exit 1 means the line could not be recorded. That is deliberately fatal for the unit:
+# a run whose stage log is missing must not look like a run that booted.
+
+set -euo pipefail
+
+SELF_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib.sh
+source "$SELF_DIR/lib.sh"
+
+case ${1:-} in
+  early)     stage=sysinit.target ;;
+  userspace) stage=multi-user.target ;;
+  *)
+    printf 'usage: %s early|userspace\n' "${0##*/}" >&2
+    exit 2
+    ;;
+esac
+
+if ! hil_ensure_results_mount; then
+  hil_log "cannot record $stage: results stick unavailable"
+  exit 1
+fi
+
+hil_append_stage "$stage"

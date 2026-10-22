@@ -1,0 +1,18 @@
+# Applies once this tree becomes a git repository. No `git init` has been run.
+#
+# Key material is never committed, by construction.
+*.key
+*.pem
+!certs/*.pem
+out/keys/
+
+# Generated artifacts: reproduce with `just build`; the durable record is record/.
+out/rpms/
+out/modules/
+out/logs/
+out/build.log
+out/BUILD.txt
+
+# Disposable: the kernel RPM cache and anything the scripts stage locally. The repository
+# root owns the ignore rule for `.build/` (the image context and staged sources live there).
+container/rpms/

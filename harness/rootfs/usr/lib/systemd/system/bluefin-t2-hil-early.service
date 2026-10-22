@@ -1,0 +1,23 @@
+[Unit]
+# bluefin-t2 HIL: one appended, fsync'd line at sysinit.target (R2-11).
+#
+# This is the artifact that proves the kernel and initramfs completed. It is ordered
+# BEFORE sysinit.target so the line's existence means sysinit's dependencies were met;
+# it waits (bounded) for the results stick, because the stick is USB and may appear
+# after udev's coldplug.
+#
+# Bench image only. Never ships in the release image.
+Description=bluefin-t2 HIL: sysinit stage marker
+DefaultDependencies=no
+After=local-fs.target systemd-udev-trigger.service
+Before=sysinit.target shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bluefin-t2-hil/stage-log early
+TimeoutStartSec=60
+
+[Install]
+WantedBy=sysinit.target

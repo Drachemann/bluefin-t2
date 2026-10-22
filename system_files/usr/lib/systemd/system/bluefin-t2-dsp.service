@@ -1,0 +1,14 @@
+[Unit]
+Description=bluefin-t2: select the T2 audio DSP graph for this model
+Documentation=file:///usr/share/bluefin-t2/MODELS.md
+ConditionPathExists=/usr/share/t2-dsp/models.json
+After=local-fs.target
+Before=graphical.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bluefin-t2/dsp-select
+
+[Install]
+WantedBy=multi-user.target

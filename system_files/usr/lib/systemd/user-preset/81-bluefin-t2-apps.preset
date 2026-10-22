@@ -1,0 +1,6 @@
+# bluefin-t2 — the inherited Touch Bar user daemon, enabled globally.
+#
+# The hub's Display page switches it off with `systemctl --global disable`, which is the
+# documented escape hatch; the attach unit checks this state with ExecCondition, so
+# disabling it restores Apple's firmware row instead of drawing a black panel.
+enable kait2en-touchbar.service

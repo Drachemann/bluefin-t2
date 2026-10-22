@@ -1,0 +1,12 @@
+# bluefin-t2 — our system units.
+#
+# The image also ships the /etc/systemd/system/*.wants symlinks these lines declare, so
+# enablement is deterministic and does not depend on a first-boot preset run. This file
+# is the declarative record, and `systemctl --root=/ preset-all --dry-run` in the build
+# proves it is coherent.
+enable bluefin-t2-firmware-import.service
+enable bluefin-t2-firmware-import.path
+enable bluefin-t2-nm-bridge.service
+enable bluefin-t2-user-groups.service
+enable bluefin-t2-user-groups.path
+enable bluefin-t2-dsp.service

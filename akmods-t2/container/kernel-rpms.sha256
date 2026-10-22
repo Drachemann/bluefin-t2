@@ -1,0 +1,17 @@
+# kernel RPM pins for the 7.2.5 proof container
+#
+# Format: <sha256>  <filename>  <url>
+#
+# These four RPMs are the kernel release shipped by the pinned Bluefin digest
+# (sha256:23b7bf54…2bc9, ostree.linux = 7.2.5-200.fc44.x86_64). The release has aged out
+# of the Fedora 44 repositories, so they come from koji. `rpm -K` verifies payload
+# digests only: RSAHEADER/SIGPGP are (none), i.e. no Fedora GPG signature. Provenance is
+# therefore HTTPS to koji plus these hashes — a pinned hash, not a skipped check
+# (research/findings/module-pipeline.md §1, design §12 open question 5).
+#
+# Fetch with scripts/fetch-kernel-rpms.sh; it re-hashes after download and refuses a
+# mismatch. Do not edit a hash to make a download pass.
+0fc5078508fb5056ee3d6c175da386e8af07e1b92bf31d665bff5623440a70c7  kernel-core-7.2.5-200.fc44.x86_64.rpm          https://kojipkgs.fedoraproject.org/packages/kernel/7.2.5/200.fc44/x86_64/kernel-core-7.2.5-200.fc44.x86_64.rpm
+02467ce35055d553db0babd680aa429c2d0b8d514469768730e03b89326a0703  kernel-devel-7.2.5-200.fc44.x86_64.rpm         https://kojipkgs.fedoraproject.org/packages/kernel/7.2.5/200.fc44/x86_64/kernel-devel-7.2.5-200.fc44.x86_64.rpm
+5cb1f8b5dd572e42f28f79e080d2d4f5024fb937540fdfbfbaa48c5eb077b2af  kernel-modules-7.2.5-200.fc44.x86_64.rpm       https://kojipkgs.fedoraproject.org/packages/kernel/7.2.5/200.fc44/x86_64/kernel-modules-7.2.5-200.fc44.x86_64.rpm
+1068e9eea0b7e7e030c6ac59653bd4130ae5a003a39b6f8a787e7a0857143755  kernel-modules-core-7.2.5-200.fc44.x86_64.rpm  https://kojipkgs.fedoraproject.org/packages/kernel/7.2.5/200.fc44/x86_64/kernel-modules-core-7.2.5-200.fc44.x86_64.rpm

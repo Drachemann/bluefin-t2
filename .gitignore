@@ -1,0 +1,19 @@
+# Build scratch and generated artifacts.
+.build/
+apps/*/target/
+iso/out/
+*.iso
+*.tar
+*.qcow2
+*.raw
+
+# Key material is never committed by construction: akmods-t2/.gitignore owns `*.key`,
+# `*.pem` (except public certs) and `out/keys/`; the kernel RPM cache is
+# akmods-t2/container/rpms/.
+
+# Read-only upstream reference clones. Not committed; materialise with research/fetch.sh,
+# pins in research/PINS.md. Never edit, never write to kaiT2en/KaiT2en-Fedora.
+research/KaiT2en-Fedora/
+research/bluefin/
+research/akmods/
+research/t2-atomic/

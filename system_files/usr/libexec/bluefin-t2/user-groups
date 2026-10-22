@@ -1,0 +1,54 @@
+#!/bin/bash
+# user-groups — root-side provisioning for human accounts.
+#
+# Replaces the per-user pkexec unit (2026-10-22). A systemd --user service is not a logind
+# session, so a polkit action with allow_active=yes never authorised it: the greeter failed
+# on SHELL, and the real user got "Not authorized". This runs as root, needs no policy, and
+# a path unit on /etc/passwd catches an account created later in the same boot.
+#
+# --dry-run prints what it would do and writes nothing.
+set -euo pipefail
+
+GROUP=kait2en-touchbar
+PASSWD_FILE=${BLUEFIN_T2_PASSWD:-/etc/passwd}
+DRY_RUN=0
+[[ ${1:-} == --dry-run ]] && DRY_RUN=1
+
+log() { printf 'bluefin-t2-user-groups: %s\n' "$*"; }
+
+[[ -e $PASSWD_FILE ]] || exit 0
+if ! getent group "$GROUP" >/dev/null 2>&1; then
+    log "group $GROUP does not exist; systemd-sysusers should create it"
+    exit 0
+fi
+
+first_human=""
+while IFS=: read -r name _ uid _ _ _ shell; do
+    [[ $uid =~ ^[0-9]+$ ]] || continue
+    (( uid >= 1000 && uid < 60000 )) || continue
+    case $shell in
+        */nologin|*/false) continue ;;
+    esac
+    [[ -n $first_human ]] || first_human=$name
+    if [[ " $(id -nG "$name" 2>/dev/null || true) " != *" $GROUP "* ]]; then
+        if (( DRY_RUN )); then
+            log "would add $name to $GROUP"
+        else
+            usermod -aG "$GROUP" "$name"
+            log "added $name to $GROUP"
+        fi
+    fi
+done < "$PASSWD_FILE"
+
+# Bind the macOS-enrolled fingers to the first human account, once. The bridge does the
+# binding itself; it only needs to know which Linux account owns them.
+conf=/etc/kait2en/t2-touchid.conf
+if [[ -n $first_human && -f $conf ]] && grep -qx 'T2_TOUCHID_BIND_USER=none' "$conf"; then
+    if (( DRY_RUN )); then
+        log "would bind Touch ID to $first_human"
+    else
+        sed -i "s|^T2_TOUCHID_BIND_USER=.*|T2_TOUCHID_BIND_USER=$first_human|" "$conf"
+        log "bound Touch ID to $first_human"
+        systemctl try-restart kait2en-t2-touchid.service 2>/dev/null || true
+    fi
+fi

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=bluefin-t2
+GenericName=T2 Hardware Status
+Comment=What works on this T2 Mac, from the model's own expectation set
+Exec=/usr/bin/bluefin-t2
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Settings;HardwareSettings;
+Keywords=t2;touchbar;hardware;report;status;
+StartupNotify=true

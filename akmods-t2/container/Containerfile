@@ -1,0 +1,51 @@
+# bluefin-t2 — A1 proof build container (design §14 T1/T2; PROOF BUILD, THROWAWAY key)
+#
+# Target: the kernel release the pinned Bluefin digest ships,
+#         ostree.linux = 7.2.5-200.fc44.x86_64
+#         (digest sha256:23b7bf54349f1a93c2fea4168c7725a632641ee67ae29b0951ef1976c1ba2bc9)
+#
+# Why the kernel packages are local files: 7.2.5 is no longer in the Fedora 44
+# repositories (they carry 7.2.11-200), so kernel-core/-modules-core/-modules/-devel
+# come from Fedora's build system (koji) into ./rpms/ and are hash-pinned in
+# kernel-rpms.sha256. Those artifacts carry no GPG signature — provenance is HTTPS to
+# koji plus the pinned sha256, which is weaker than a signed repository. See
+# record/SOURCES.md and research/findings/module-pipeline.md §1. A rebuild for a
+# release that is still in `updates` should take kernel-devel from the repository
+# instead, and that is the path T3 automates.
+#
+# Sources are NOT baked into this image. stage-sources.sh copies the pinned clone into
+# a build tree and run.sh mounts it at /src, so the container can never drift from the
+# submodule and a source change never needs an image rebuild.
+#
+# This is NOT the shipping packaging mechanism (that is `akmods --force` for the
+# published artifact, design §5). It exists to prove the modules build, sign and verify
+# against the image kernel without loading anything.
+
+FROM registry.fedoraproject.org/fedora:44
+
+# Kernel 7.2.5-200.fc44.x86_64: core (vmlinuz + /lib/modules tree), modules-core and
+# modules (a complete module tree, so depmod is meaningful), and devel (headers +
+# scripts/sign-file + scripts/extract-module-sig.pl + Module.symvers).
+COPY rpms/ /rpms/
+
+RUN dnf -y install \
+        /rpms/kernel-core-7.2.5-200.fc44.x86_64.rpm \
+        /rpms/kernel-modules-core-7.2.5-200.fc44.x86_64.rpm \
+        /rpms/kernel-modules-7.2.5-200.fc44.x86_64.rpm \
+        /rpms/kernel-devel-7.2.5-200.fc44.x86_64.rpm \
+    && dnf -y install \
+        binutils \
+        cpio \
+        diffutils \
+        findutils \
+        gcc \
+        kmod \
+        make \
+        openssl \
+        perl-interpreter \
+        rpm-build \
+    && dnf clean all
+
+WORKDIR /work
+
+# Sources are mounted at /src by run.sh; keys at /keys; output at /out.

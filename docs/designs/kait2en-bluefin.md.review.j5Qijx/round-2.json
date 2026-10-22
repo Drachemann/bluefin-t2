@@ -1,0 +1,299 @@
+{
+  "version": 1,
+  "round": 2,
+  "document": "/home/matt/src/KaiT2en-Bluefin/docs/designs/kait2en-bluefin.md",
+  "quality_score": 7,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "PASS",
+    "feasibility": "ISSUES"
+  },
+  "findings": [
+    {
+      "id": "R2-1",
+      "dimension": "completeness",
+      "problem": "The Touch ID SELinux module has no assigned source, build step or file row. The Touch ID paragraph says the complete file set includes `the SELinux module`, and Tier 0 says `the image build does run semodule -i by design, so the SELinux module's presence is a separate positive assertion` - but the `system_files/shared/` table (described as carrying `everything KAIT2EN writes into image-owned paths`) has no row for the `.te`/`.fc`/`.pp` source or `/usr/share/selinux/packages/kait2en-t2-touchid.pp`, none of Artifact 2's four steps compiles it (`checkmodule` + `semodule_package`, evidence base `t2-touchid/integration/selinux/Makefile:6-9`) or installs it (`semodule -X 400 -i`), and `checkpolicy`/`policycoreutils` were placed in the runtime package list instead. Nothing Tier 0 asserts therefore exists in the build, and Touch ID's policy is missing from the only inventory that claims completeness.",
+      "remedy": "Add the SELinux sources to `system_files/shared/` or a dedicated build step that compiles and installs the module, move `checkpolicy`/`policycoreutils` to build-only, assert the module's presence and priority in Tier 0, and keep only `restorecon /run/t2-touchid` as a runtime action."
+    },
+    {
+      "id": "R2-2",
+      "dimension": "completeness",
+      "problem": "The unit inventory and the Tier 0 unit assertion do not include the units this design adds. The document states `Unit inventory (11 units for v1, 10 system + 1 user)` and Tier 0 verifies `all 11 units`, but v1 also ships `kait2en-firmware-import.service`, `kait2en-firmware-import.path`, `kait2en-touchid-bind.service` (a second user unit, described in the Touch ID paragraph) and the unnamed `first-boot unit` that creates the NetworkManager `Apple T2 Bridge` profile; the HIL-only `kait2en-hil-early.service` and the unnamed JSON writer are likewise absent. Those units would ship without appearing in the inventory or the `systemd-analyze verify` list, and the stated count is short.",
+      "remedy": "Extend the inventory and the Tier 0 assertion to every unit shipped in v1 (firmware import service and path unit, touchid-bind, the NM-profile unit), naming source file, unit name and enablement for each; name the first-boot NM-profile unit; list the HIL-only units under the harness image."
+    },
+    {
+      "id": "R2-3",
+      "dimension": "completeness",
+      "problem": "The firmware payload's path from the kit medium to the installed ESP is unassigned for route 1. The carrier is `the installed ESP, written by the kit`, but the kit runs on macOS before the target ESP exists, and the Anaconda addon that previously carried the captured firmware across the install boundary into the target sysroot is deliberately dropped (evidence base section 3.4; the live `/run/kait2en/apple-firmware` carrier is documented there as not reaching the installed system). Nothing states whether the kit's payload on the installer USB's ESP is copied by a kickstart `%post` or first-boot unit, or whether the install reuses a pre-existing macOS ESP, so Trigger A's `pre-seeded payload` has no assigned origin and route 1's Wi-Fi claim rests on an unbuilt step.",
+      "remedy": "Name the transfer step for route 1 (kickstart `%post`, a first-boot copy from the installer medium, or a pre-existing ESP written from macOS), state whether the install reuses or creates the ESP, and make Tier 3 verify the pre-seeded path end to end: payload present on the installed ESP before first boot, import unit runs, Wi-Fi associates."
+    },
+    {
+      "id": "R2-4",
+      "dimension": "completeness",
+      "problem": "Fingerprint authentication is never enabled. The document commits to `Touch ID authenticates through fprintd` and lists the fprintd drop-in, D-Bus policy, config, SELinux module and bind unit, but omits `authselect enable-feature with-fingerprint` (evidence base class B, `lifecycle.py:395-403`) and omits `fprintd-pam` from `07-t2-packages.sh`. Enrolment would work while login and unlock never offer the fingerprint, and nothing in Tier 0 asserts the PAM change.",
+      "remedy": "Add `fprintd-pam` and an `authselect` build step (recording that the runtime receipt/rollback logic is dropped), and assert the resulting PAM stack change in Tier 0."
+    },
+    {
+      "id": "R2-5",
+      "dimension": "consistency",
+      "problem": "The 18-module assertion has no enumerated set, and the packaging as written accounts for 16. Artifact 1 lists 12 specs and names only `t2bce_stack`'s five objects, but `t2touchbar` produces three objects (`t2hid`, `t2touchbar_bl`, `t2touchbar_kbd`; evidence base `modules/t2touchbar/dkms.conf:1-14`) that the document never mentions, so 5 + 11 = 16. Success Criteria and Tier 2 then assert `all 18 modules load` without a list to check, and the blanket count ignores device-gated modules such as `t2gmux` (the Apple GPU mux), which has no device on a model for which the design itself excludes the dGPU apps.",
+      "remedy": "Enumerate the 18 objects per spec in Artifact 1, state the expected-loaded set for MacBookPro16,2 with expected absentees such as the GPU-mux module, and make Tier 0 and Tier 2 assert that named set instead of a count."
+    },
+    {
+      "id": "R2-6",
+      "dimension": "consistency",
+      "problem": "Tier 0 points at a Tier 3 VM that the test strategy does not contain. It says `modprobe --dry-run ... does not prove symbol resolution, so the real proof is the target-kernel VM in Tier 3`, but Tier 3 is `kit and ISO, gated` hardware-in-the-loop; none of the four tiers has a VM, so the stated proof route does not exist.",
+      "remedy": "Either add a target-kernel VM tier, stating where and when it runs, or point the sentence at the `depmod -a` unknown-symbol assertion and the Tier 2 load, removing the VM reference."
+    },
+    {
+      "id": "R2-7",
+      "dimension": "clarity",
+      "problem": "Success criterion (c) - Secure Boot on, our DER not enrolled, expected to fail `with the documented recovery (boot the previous deployment, enrol, reboot)` - has no reachable path on the route that matters. Route 1's first install has no previous deployment to boot, and the design mandates MOK enrolment from the live environment before first boot, so (c) cannot occur on the designed path; if it does occur, the machine has no initramfs keyboard, which is the Constraint 5 unrecoverable case. The design also does not say how the firmware's Secure Boot state is toggled to test (a), (b) and (c).",
+      "remedy": "State how (c) is deliberately produced on a test install, give a recovery that exists there (re-run the kit or live medium, with an external keyboard as the documented fallback), note that route 1 is designed to make (c) unreachable, and say how Secure Boot is switched for each test state."
+    },
+    {
+      "id": "R2-8",
+      "dimension": "consistency",
+      "problem": "Next Steps 7 and 8 are ordered against their own artefacts. Step 7 wires `mokutil --import` for our DER `into route 1` and tests criteria (b) and (c); route 1 is the BIB ISO that step 8 builds, and the `live installer environment` the enrolment runs in only exists inside that ISO, so the enrolment test cannot run before step 8.",
+      "remedy": "Build the ISO before enrolment verification, or state that step 7 wires kit/ISO scripts and that step 8's Tier 3 run is where (b) and (c) are tested."
+    },
+    {
+      "id": "R2-9",
+      "dimension": "clarity",
+      "problem": "The first-login bind unit's mechanism is unspecified where it matters. `kait2en-touchid-bind.service` is described as `a first-login user unit that writes T2_TOUCHID_BIND_USER for the logged-in user and restarts the service`, but a systemd user unit cannot restart a system service without a shipped polkit action or a root helper, and `first login` needs a per-user marker or preset rule that is never stated. Installed as described, the Touch ID binding would not be applied.",
+      "remedy": "Choose and state the mechanism (polkit-authorized helper called by the user unit, a PAMName=/pam_exec hook, or a documented one-time root command), ship the polkit action, state how first login is detected, and add the unit to the inventory and Tier 0."
+    },
+    {
+      "id": "R2-10",
+      "dimension": "feasibility",
+      "problem": "The brcmfmac reload cannot work as written and its ordering is still unstated. Trigger A runs `modprobe -r brcmfmac_wcc brcmfmac` after the coldplug attempt, but the PCI device is bound to `brcmfmac` at that point, so removal fails with `module in use` unless the device is unbound (or removed and rescanned) first. The carried obligation from round 1 also remains unmet: the unit is not ordered relative to NetworkManager and `network-online.target`, so first-boot association depends on an unspecified NetworkManager retry.",
+      "remedy": "Unbind the PCI device (or remove/rescan it) before removing the module, reload after the payload is in `/var/lib/firmware/brcm`, order the unit after the coldplug attempt and before `network-online.target` (or restart NetworkManager after the reload), and assert first-boot association in Tier 2."
+    },
+    {
+      "id": "R2-11",
+      "dimension": "feasibility",
+      "problem": "The failed-boot capture still cannot observe the failure class that motivated it. `kait2en-hil-early.service` is bound to `sysinit.target`, so a boot that fails in the initramfs or kernel - the document's own examples (missing input module, panicking module, bad kargs) - writes neither `boot-attempt` nor a JSON; the stated rule only covers `If boot-attempt exists without a JSON`, and has no branch for the no-marker case, so the honest capture remains an operator photograph that the harness never records as an outcome.",
+      "remedy": "Put the attempt marker before the failure point (the harness writes it to the results partition before boot, or the initramfs writes it), define the timeout/no-marker branch that records `FAILED_BOOT` with the tested digest and the screen photograph, and say where that record is written."
+    },
+    {
+      "id": "R2-12",
+      "dimension": "feasibility",
+      "problem": "The HIL results partition has no home under the stated install invocation. Tier 2 installs with `bootc install to-disk ... /dev/nvme1n1` (whole target device, no partition layout) and at the same time says `the external disk carries a results partition both systems can mount`, while the internal root is LUKS-encrypted `so results cannot go there`. `bootc install to-disk` repartitions its target, so the results partition's location, creation and survival across the install are undefined.",
+      "remedy": "State where the results partition lives (a second disk/USB, or a supported partitioned install such as `to-filesystem`), how it is created and mounted by both systems, and update the install invocation so the two claims agree."
+    },
+    {
+      "id": "R2-13",
+      "dimension": "feasibility",
+      "problem": "The two pipelines' kernel lockstep is asserted but not specified. Artifact 2 says `skopeo copy the akmods-t2 image matching the kernel now present in the build` without saying how the build determines that kernel, and the image base is pinned by digest while `akmods-t2` is tagged by kver. With independent triggers (Artifact 1 `daily cron chasing the Bluefin image's kernel label`, Distribution `daily cron against Bluefin Classic`), an image build can run before the matching module cache exists; the only stated fail-safe, `a compile failure on a kernel bump fails CI by construction`, addresses the module pipeline rather than this race.",
+      "remedy": "State the kernel resolution (the base image's `ostree.linux` label or the `/usr/lib/modules` entry), make the image build fail closed with an explicit error when no `akmods-t2` tag matches, and define the trigger order so the akmods-t2 build/dispatch precedes the bluefin-t2 rebuild."
+    },
+    {
+      "id": "R2-14",
+      "dimension": "completeness",
+      "problem": "The runtime/build package split is incomplete and partly inverted. Step 07's build list lacks tools the committed steps need: `rpm-build` (step 08 builds the apps `as RPMs`), `pkgconf-pkg-config` (Rust/GTK builds), `adwaita-sans-fonts` (the Touch Bar app's font, evidence base `apps/t2-touchbar/install.sh:57`) and `plymouth-plugin-script` (the shipped Plymouth theme's script plugin); the runtime list contains `checkpolicy`, `policycoreutils`, `gcc` and `make`, which are needed only at build time (nothing at runtime compiles, since `t2-kernel-builder` is excluded), and `fprintd-pam` is missing (see R2-4).",
+      "remedy": "Complete both lists from the design's evidence base (`install-dependencies.sh:24-62`, `install-dsp.sh:33-35`, `apps/t2-touchbar/install.sh:57`, `dsp/Makefile`), move `checkpolicy`/`policycoreutils`/`gcc`/`make` to build-only, and assert in Tier 0 that the build-only set is absent from the committed image."
+    },
+    {
+      "id": "R2-15",
+      "dimension": "completeness",
+      "problem": "The table said to carry `everything KAIT2EN writes into image-owned paths` omits the fonts, licence and wordmark. The JetBrains Mono fonts plus the OFL licence (`lib.sh:142-161`) and `kait2en-wordmark.png` (`install-apps.sh:143-147`) currently go to `/usr/local/share`, and no row moves them to a `/usr/share` path or names their owner; step 08's `fc-cache -f` therefore has no shipped font to index.",
+      "remedy": "Add rows for `/usr/share/fonts/kait2en/*` with `/usr/share/licenses/kait2en-fonts/OFL.txt` and the wordmark asset, and state the `/usr/local` to `/usr/share` move for every shipped data file."
+    },
+    {
+      "id": "R2-16",
+      "dimension": "completeness",
+      "problem": "The Touch Bar app's per-user group membership is unassigned. The image ships the `kait2en-touchbar` sysusers entry and a udev rule that depends on that group, but KAIT2EN's `usermod -aG kait2en-touchbar` for the invoking desktop user (`apps/t2-touchbar/install.sh:63-64`) cannot run at build time, and the only per-user step the design defines is the Touch ID bind unit. On an image whose first user is created at first boot, the bar can ship and still be inaccessible to that user.",
+      "remedy": "Add a first-login mechanism that adds the logged-in user to the group (or replace the group rule with a udev uaccess/TAG+= rule that needs no membership), state how the account is detected, and cover the Touch Bar as the desktop user in the Tier 2 smoke test."
+    }
+  ],
+  "prior": [
+    {
+      "id": "R1-1",
+      "status": "resolved",
+      "evidence": "Decisions-taken bullet `Shape of the image: a thin derivative, and the initramfs is regenerated in it`; Artifact 2's `FROM ghcr.io/ublue-os/bluefin:<fedora>@<digest>` with step 09 `dracut --force --no-hostonly --kver $KERNEL --reproducible --add ostree` (`exactly as Bluefin's own 19-initramfs.sh does`); the 03/19 ordering claim is replaced by `Because the upstream 03/19 build steps have already run and the initramfs is already baked, the derivative owns four things`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-2",
+      "status": "resolved",
+      "evidence": "Premise 5 `Resolved below: v1 signs and enrols`; the decisions bullet `Signing is committed for v1, with one key, and MOK enrolment happens from the live installer environment before the installed system's first boot`; Artifact 1's one-key signing sequence; Open Question 1 now states the CI-held custody assumption with offline generation and rotation; Next Step 1 and Next Step 7 implement signing and enrolment ahead of any install.",
+      "current_id": null
+    },
+    {
+      "id": "R1-3",
+      "status": "resolved",
+      "evidence": "Tier 0 narrows the policy assertion to `no runtime unit, script or image-owned hook invokes grubby, dkms or semodule; no /boot writes; nothing under /etc/kernel/install.d` and adds that `the image build does run semodule -i by design, so the SELinux module's presence is a separate positive assertion`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-4",
+      "status": "resolved",
+      "evidence": "The `Unit inventory (11 units for v1, 10 system + 1 user)` table now includes `t2-services-suspend.service` and the four app units (fan, smc-gaugingd, zonepowerd, force-click) with source file and enablement, and Tier 0 verifies `all 11 units`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-5",
+      "status": "resolved",
+      "evidence": "`Two initramfs module sets, deliberately different, both asserted by name` lists the installed six (t2bce_dma t2bce_core t2bce_vhci t2hid t2smc t2sbs) and the installer five (t2bce_dma t2bce_core t2bce_vhci t2touchbar hid_t2magicmouse), justifies each set, and Tier 0's lsinitrd `asserts both named module lists`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-6",
+      "status": "resolved",
+      "evidence": "Problem Statement now cites the target's journal (`30 PM: suspend entry (deep)` / `PM: suspend exit` pairs in 30 days, including today's times); the coaching bullet repeats that journal evidence instead of t2-atomic's masked suspend.target; Success Criteria requires ten consecutive cycles.",
+      "current_id": null
+    },
+    {
+      "id": "R1-7",
+      "status": "resolved",
+      "evidence": "Artifact 3 says `Drop the Anaconda addon entirely` and restates its real jobs (firmware into the target sysroot, transition kmod, kernel args) as satisfied by the image or first boot, states that live-input injection `was never an addon job`, removes the addon Open Question, and Next Step 6 ends `drop the Anaconda addon`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-8",
+      "status": "resolved",
+      "evidence": "Artifact 2 adds step 07 (runtime vs build-only package lists) and step 08 (builds the 8 shipped apps as RPMs and runs fc-cache, gtk-update-icon-cache and dconf update), enumerates the shipped apps and the three excluded ones, and no longer claims a 13-binary total.",
+      "current_id": null
+    },
+    {
+      "id": "R1-9",
+      "status": "resolved",
+      "evidence": "The `Touch ID needs more than a unit` paragraph gives the complete file set (fprintd drop-in, D-Bus system policy, /etc/kait2en/t2-touchid.conf, SELinux module), decides the per-user binding as kait2en-touchid-bind.service, and makes the NetworkManager `Apple T2 Bridge` profile plus `10-t2-services.conf` v1 content created by a first-boot unit.",
+      "current_id": null
+    },
+    {
+      "id": "R1-10",
+      "status": "resolved",
+      "evidence": "`Firmware channel - concrete` names the carrier (/boot/efi/kait2en/firmware/ on the installed ESP), destination /var/lib/firmware/brcm via firmware_class.path, Trigger A (oneshot with ConditionPathExists), Trigger B (path unit plus manual kait2en-import-firmware), and the absent-payload behaviour (no Wi-Fi, a notification, kait2en-firmware-status reports absent).",
+      "current_id": null
+    },
+    {
+      "id": "R1-11",
+      "status": "persisting",
+      "evidence": "Trigger A now reloads the driver (`modprobe -r brcmfmac_wcc brcmfmac; modprobe brcmfmac`) and Tier 2 pre-places the payload on the external ESP, but the prior remedy's ordering obligation is still unmet: the unit's order relative to NetworkManager and network-online.target is never stated, so first-boot association is left to an unspecified retry.",
+      "current_id": "R2-10"
+    },
+    {
+      "id": "R1-12",
+      "status": "resolved",
+      "evidence": "Tier 3 - kit and ISO, gated: `One HIL run per ISO build using the real kit and a real USB ... and a clean install with no external hardware attached. Its result goes to the results partition like Tier 2`, with the success criterion and Next Step 8 referencing it.",
+      "current_id": null
+    },
+    {
+      "id": "R1-13",
+      "status": "persisting",
+      "evidence": "`kait2en-hil-early.service` (bound to `sysinit.target`) writes `boot-attempt` and the rule is `If boot-attempt exists without a JSON, the harness records FAILED_BOOT`, but the marker runs after the initramfs/kernel stage where the named failures occur and there is no branch for the no-marker case.",
+      "current_id": "R2-11"
+    },
+    {
+      "id": "R1-14",
+      "status": "resolved",
+      "evidence": "`Licences` publishes a per-release corresponding-source tarball (KAIT2EN submodule at the pinned commit plus our patches), a source-<version> tag, and the kit under GPL-3.0-or-later with a NOTICE naming the fork point; Artifact 3 places the kit in bluefin-t2/installer/, so `two repos, three artifacts` is consistent.",
+      "current_id": null
+    },
+    {
+      "id": "R1-15",
+      "status": "resolved",
+      "evidence": "Constraint 7, the decisions bullet `Shipping name is neutral (bluefin-t2)`, and the `Naming` paragraph recording the TRADEMARK.md permission requirement, the neutral image name and the allowed factual reference.",
+      "current_id": null
+    },
+    {
+      "id": "R1-16",
+      "status": "resolved",
+      "evidence": "The `Registry policy` paragraph states that /etc/containers/policy.json arrives from projectbluefin/common and that the build appends our registry and cosign key, and Artifact 2 states Bluefin's 20-tests.sh `is not ours and does not run against a derivative, so our gates replace it`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-17",
+      "status": "resolved",
+      "evidence": "The `Kit distribution` paragraph: release asset, SHA-256 and cosign signature, a documented command that downloads, verifies, prints the target disk and requires typed confirmation, and `No curl | bash`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-18",
+      "status": "resolved",
+      "evidence": "`DMI gates, made explicit`: v1 ships the 11 base kargs with no model exceptions and supports MacBookPro16,2 only; the Touch Bar's ConditionPathExists on the t2bdrm node is the one named runtime gate; the kargs row repeats `no model exceptions`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-19",
+      "status": "resolved",
+      "evidence": "Success Criteria state (a) SB off expected to load, (b) SB on with our DER enrolled expected to load with the initramfs keyboard working, (c) SB on not enrolled expected to fail with documented recovery, and `Criterion passes only when (a) and (b) both hold`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-20",
+      "status": "resolved",
+      "evidence": "Criterion 1 is scoped to route 1 (`route 1 (kit-prepped ISO) installs with no external keyboard, mouse or ethernet. Route 2 is exempt and says so`), and the routes table states each route's external-hardware requirement.",
+      "current_id": null
+    },
+    {
+      "id": "R1-21",
+      "status": "resolved",
+      "evidence": "Tier 0 names ghcr.io/<org>/t2-test-harness with kernel-devel for the target release, dracut, systemd, openssl, kmod and python3, and says assertions run in the harness against the built image's filesystem mounted read-only - not inside the image, because Bluefin's 05-override-install.sh removed /usr/src and kernel-devel.",
+      "current_id": null
+    },
+    {
+      "id": "R1-22",
+      "status": "resolved",
+      "evidence": "Next Step 1 is scoped to building, signing and verifying t2smc for Bluefin's label, and `The Assignment` splits the work: build/load for the host's uname -r, then build for 7.2.5 and verify `without loading it` by vermagic, depmod and CMS.",
+      "current_id": null
+    },
+    {
+      "id": "R1-23",
+      "status": "resolved",
+      "evidence": "Artifact 1 states `The packaging work does not exist yet and is the bulk of the estimate`, lists the 12 specs, packages t2bce_stack's five objects in one RPM, carries each dkms.conf version, and says `a compile failure on a kernel bump fails CI by construction`.",
+      "current_id": null
+    },
+    {
+      "id": "R1-24",
+      "status": "resolved",
+      "evidence": "The header baseline records bluefin:stable's ostree.linux = 7.2.5-200.fc44.x86_64 (verified 2026-10-20), Constraint 2 repeats it, and Open Question 6 makes module/kernel compile compatibility a scheduled risk.",
+      "current_id": null
+    },
+    {
+      "id": "R1-25",
+      "status": "resolved",
+      "evidence": "Tier 1 loads `only modules that do not carry the active input path` (t2smc, t2thunderbolt, t2mfi_fastcharge, t2smp), never t2hid/t2bce_*/hid_t2magicmouse, and states preconditions (external keyboard or second boot target) plus the rollback command per step.",
+      "current_id": null
+    },
+    {
+      "id": "R1-26",
+      "status": "resolved",
+      "evidence": "`Two install routes, not three` explains that bootc switch operates on the system it runs in, replaces route 2 with `sudo bootc switch ghcr.io/<org>/bluefin-t2:stable && sudo reboot` on the running stock system, and re-scopes the no-external-hardware claim.",
+      "current_id": null
+    },
+    {
+      "id": "R1-27",
+      "status": "resolved",
+      "evidence": "Tier 2 gives the pinned invocation (podman run ... fedora-bootc:44 bootc install to-disk --source-imgref ghcr.io/<org>/bluefin-t2@sha256:<digest> /dev/nvme1n1), states bootc is absent from the host and comes from the container, and writes the tested digest into the results JSON.",
+      "current_id": null
+    },
+    {
+      "id": "R1-28",
+      "status": "resolved",
+      "evidence": "Tier 0 says `modprobe --dry-run` `proves dependency order and existence (it does not prove symbol resolution...)` and asserts `depmod -a reports no unknown symbols`, which is the symbol proof the remedy asked for.",
+      "current_id": null
+    },
+    {
+      "id": "R1-29",
+      "status": "resolved",
+      "evidence": "Tier 0 uses `systemctl --root=<image> preset-all --dry-run` and then asserts the generated `*.wants` symlinks exist.",
+      "current_id": null
+    },
+    {
+      "id": "R1-30",
+      "status": "resolved",
+      "evidence": "Artifact 1 describes one signature from one key (signing_key.pem, one `openssl cms -sign` with -signer, one `scripts/sign-file`, then `cms -verify -certfile -noverify`) and explains why dual-signing is unnecessary because we do not hold the kernel-signing key.",
+      "current_id": null
+    },
+    {
+      "id": "R1-31",
+      "status": "resolved",
+      "evidence": "The decisions bullet `Bluefin DX is out of v1` and Distribution's `{stable,latest} ... No DX in v1`, with no remaining requirement or criterion mentioning DX.",
+      "current_id": null
+    }
+  ]
+}

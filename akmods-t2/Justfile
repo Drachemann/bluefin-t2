@@ -1,0 +1,63 @@
+# akmods-t2 — the A1 proof build (design §14 T1/T2)
+#
+# `just --list` shows the recipes. The three that matter:
+#   just build         stage + build + sign + package + verify for the pinned kernel
+#   just verify        re-run the assertion set on the packaged artifacts (no key needed)
+#   just throwaway-key generate a clearly-labelled proof key under out/keys/
+#
+# No key material is in this repository and none is produced by `just build` on its own.
+
+set shell := ["bash", "-uc"]
+
+# `just -f akmods-t2/Justfile` runs every recipe with the working directory set to
+# this file's directory, so paths here are relative to akmods-t2/.
+kver  := `cat record/KVER`
+short := `cat record/KVER | cut -d- -f1`
+
+default:
+    @just --list
+
+# stage the pinned KAIT2en sources into .build/src and prove the copy
+stage:
+    scripts/stage-sources.sh
+
+# verify the hash-pinned kernel RPM cache (downloads nothing)
+kernel-rpms:
+    scripts/fetch-kernel-rpms.sh --check
+
+# build the proof container for the recorded kernel release
+container:
+    scripts/fetch-kernel-rpms.sh --check
+    podman build -t localhost/bluefin-t2-proof:{{short}} container/
+
+# the full A1 proof: stage, build, sign, package, verify
+build:
+    scripts/run.sh --image localhost/bluefin-t2-proof:{{short}}
+
+# verify the packaged artifacts alone (the half that needs no private key)
+verify:
+    scripts/verify-artifacts.sh out/rpms {{kver}} certs/t2-proof-THROWAWAY.pem --exact
+
+# generate a THROWAWAY proof key under out/keys/ — never enrolled, never production
+throwaway-key:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -e out/keys/signing.key ] || [ -e out/keys/signing.pem ]; then
+        echo "refusing to overwrite an existing key pair in out/keys/" >&2
+        exit 1
+    fi
+    mkdir -p out/keys
+    openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
+        -keyout out/keys/signing.key -out out/keys/signing.pem \
+        -subj "/CN=bluefin-t2 THROWAWAY proof key - NOT PRODUCTION" 2>/dev/null
+    chmod 600 out/keys/signing.key
+    openssl x509 -in out/keys/signing.pem -outform DER -out out/keys/signing.der
+    echo "" >&2
+    echo "  ==================================================================" >&2
+    echo "   THROWAWAY key written to out/keys/. It is a PROOF key." >&2
+    echo "   * never enrol it in MOK" >&2
+    echo "   * never sign a release with it" >&2
+    echo "   * never commit it (out/keys/ is ignored)" >&2
+    echo "  ==================================================================" >&2
+    echo "" >&2
+    openssl x509 -in out/keys/signing.pem -noout -subject -dates

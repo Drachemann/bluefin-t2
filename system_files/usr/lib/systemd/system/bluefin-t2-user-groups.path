@@ -1,0 +1,11 @@
+[Unit]
+Description=bluefin-t2: re-run user provisioning when /etc/passwd changes
+# Initial-setup creates the account after multi-user.target, so the boot-time oneshot
+# cannot see it. Watching /etc/passwd makes user creation the trigger.
+
+[Path]
+PathChanged=/etc/passwd
+Unit=bluefin-t2-user-groups.service
+
+[Install]
+WantedBy=paths.target

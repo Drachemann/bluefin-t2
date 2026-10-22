@@ -1,0 +1,7 @@
+# bluefin-t2 HIL harness units — bench image only, never the release image.
+#
+# The bench image must also copy harness/rootfs/etc/systemd/system/*.wants/ (shipped as
+# symlinks) or run `systemctl preset-all` after this file and the units are in place.
+enable bluefin-t2-hil-early.service
+enable bluefin-t2-hil-userspace.service
+enable bluefin-t2-hil-test.service

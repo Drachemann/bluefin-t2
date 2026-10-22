@@ -1,0 +1,104 @@
+#!/usr/bin/bash
+# first-run — finish setup after the first login, and ask for the one reboot.
+#
+# Mirrors KaiT2EN's first boot: the installer has already placed the firmware, the group
+# and the Touch ID binding; what remains is that the fingerprint bridge has to be running
+# with the NCM link before fprintd enumerates it. The first session may predate that, so
+# this tells the user once, in a dialog, that one reboot finishes the job — and stays silent
+# forever after.
+#
+# It never changes system state itself: groups, firmware and the DSP graph are root units.
+# It only reports what is ready and offers the reboot.
+#
+#   first-run            show the dialog (once per user)
+#   first-run --check    print the state and exit 0, no display, no state written
+#   first-run --force    show it again
+
+set -uo pipefail
+
+CHECK=0
+FORCE=0
+for arg in "$@"; do
+    case $arg in
+        --check) CHECK=1 ;;
+        --force) FORCE=1 ;;
+        -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) printf 'usage: %s [--check|--force]\n' "${0##*/}" >&2; exit 2 ;;
+    esac
+done
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/bluefin-t2"
+state="$state_dir/first-run.done"
+
+if (( ! FORCE )) && [[ -e $state ]]; then
+    (( CHECK )) && echo "first-run: done"
+    exit 0
+fi
+
+# Unsupported hardware: nothing was set up, so there is nothing to ask about.
+model_class=""
+verdict=""
+if command -v bluefin-t2 >/dev/null 2>&1; then
+    doc=$(bluefin-t2 report --json 2>/dev/null || true)
+    verdict=$(printf '%s' "$doc" | sed -n 's/.*"verdict"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    model_class=$(printf '%s' "$doc" | sed -n 's/.*"class"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+fi
+if [[ $model_class == unsupported ]]; then
+    (( CHECK )) && echo "first-run: unsupported model, nothing to finish"
+    exit 0
+fi
+
+# Fingerprint: fprintd must see the bridge's virtual device with the macOS-enrolled finger.
+fp_ok=0
+if command -v fprintd-list >/dev/null 2>&1; then
+    fp_out=$(fprintd-list "$USER" 2>&1 || true)
+    if [[ -n $fp_out ]] && ! grep -qiE 'no fingers|no prints|no devices available|not found' <<<"$fp_out"; then
+        fp_ok=1
+    fi
+fi
+
+# The bridge can only be called ready if the journal does not say it failed this boot.
+bridge_fail=0
+if journalctl -b -u kait2en-t2-touchid >/dev/null 2>&1; then
+    journalctl -b -u kait2en-t2-touchid 2>/dev/null | grep -q 'cannot reach the sensor' && bridge_fail=1
+fi
+
+group_ok=0
+id -nG 2>/dev/null | tr ' ' '\n' | grep -qx kait2en-touchbar && group_ok=1
+
+firmware_ok=0
+[[ -s /var/lib/bluefin-t2/firmware.state ]] && firmware_ok=1
+
+dsp_ok=0
+[[ -s /etc/pipewire/pipewire.conf.d/51-t2-dsp.conf ]] && dsp_ok=1
+
+needs_reboot=0
+(( fp_ok )) || needs_reboot=1
+(( bridge_fail )) && needs_reboot=1
+(( group_ok )) || needs_reboot=1
+
+if (( CHECK )); then
+    printf 'first-run: verdict=%s model=%s fingerprint=%s bridge=%s group=%s firmware=%s dsp=%s reboot=%s\n' \
+        "${verdict:-unknown}" "${model_class:-unknown}" "$fp_ok" "$bridge_fail" "$group_ok" "$firmware_ok" "$dsp_ok" "$needs_reboot"
+    exit 0
+fi
+
+mkdir -p "$state_dir"
+
+if (( needs_reboot )); then
+    text="bluefin-t2 finished setting up this Mac.\n\nOne reboot is needed before Touch ID appears at the login screen — the same one-reboot step KaiT2EN's first boot asks for. The Touch Bar, audio and everything else are already in place.\n\nReboot now?"
+    if command -v zenity >/dev/null 2>&1 && [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]]; then
+        if zenity --question --title="bluefin-t2" --ok-label="Reboot now" --cancel-label="Later" --text="$text" 2>/dev/null; then
+            : > "$state"
+            gnome-session-quit --reboot --no-prompt 2>/dev/null || systemctl reboot
+            exit 0
+        fi
+    fi
+else
+    if command -v zenity >/dev/null 2>&1 && [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]]; then
+        zenity --info --title="bluefin-t2" --text="bluefin-t2 is ready. Touch ID, the Touch Bar, audio and the firmware import all report healthy." 2>/dev/null || true
+    fi
+fi
+
+: > "$state"
+exit 0

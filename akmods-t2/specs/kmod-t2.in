@@ -1,0 +1,28 @@
+%define __os_install_post %{nil}
+%define debug_package %{nil}
+%define _build_id_links none
+
+Name:           @NAME@
+Version:        @VERSION@
+Release:        1
+Summary:        t2 kernel module(s) for @KVER@: @MODULES@ (proof build)
+License:        GPL-2.0-only
+Requires:       kernel-core-uname-r = @KVER@
+BuildArch:      x86_64
+URL:            https://github.com/kaiT2en/KaiT2en-Fedora
+
+%description
+Proof packaging of the bluefin-t2 A1 kmod set for the kernel release shipped by
+the pinned Bluefin digest (@KVER@).
+
+This is the rpmbuild mechanism named in design §5 closed call 3: the contributor
+loop builds one spec with rpmbuild, while the published artifact is built with
+`akmods --force`. The modules carry the signature of the key named in the build
+record; for the proof build that key is a THROWAWAY key enrolled nowhere.
+
+%install
+install -d %{buildroot}/usr/lib/modules/@KVER@/extra
+install -m 0644 %{_sourcedir}/*.ko %{buildroot}/usr/lib/modules/@KVER@/extra/
+
+%files
+@FILES@

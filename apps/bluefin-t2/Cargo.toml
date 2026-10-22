@@ -1,0 +1,23 @@
+[package]
+name = "bluefin-t2"
+version = "0.1.0"
+edition = "2021"
+description = "bluefin-t2 — the machine's own answer to what works here, and the hub that shows it"
+license = "GPL-3.0-or-later"
+repository = "https://example.invalid/bluefin-t2"
+
+[[bin]]
+name = "bluefin-t2"
+path = "src/main.rs"
+
+[dependencies]
+# The hub's widgets. `report` never initialises GTK, so a headless rescue session can still
+# run it; the libraries only have to be present.
+gtk4 = "0.9"
+libadwaita = "0.7"
+# The hub reads `report --json` and nothing else, so it parses the documented contract.
+serde_json = "1.0"
+
+[profile.release]
+strip = true
+opt-level = "s"

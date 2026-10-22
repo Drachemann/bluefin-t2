@@ -1,0 +1,12 @@
+# bluefin-t2 — the inherited daemons, enabled.
+#
+# The image also ships the /etc/systemd/system/multi-user.target.wants symlinks these
+# lines declare, so enablement is deterministic and does not depend on a first-boot preset
+# run. Gate 13 asserts both, and that no unit keeps upstream's self-ordering
+# `After=multi-user.target` (a cycle with `WantedBy=multi-user.target`).
+enable t2-fancontrol.service
+enable t2-smc-gaugingd.service
+enable t2-zonepowerd.service
+enable t2-force-click.service
+enable kait2en-touchbar-attach.service
+enable kait2en-t2-remote.service
